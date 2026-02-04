@@ -17,11 +17,9 @@ export const env = {
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
   supabaseStorageBucket: process.env.SUPABASE_STORAGE_BUCKET || 'question-images',
-  smtpHost: process.env.SMTP_HOST,
-  smtpPort: Number(process.env.SMTP_PORT || 587),
-  smtpUser: process.env.SMTP_USER,
-  smtpPass: process.env.SMTP_PASS,
-  smtpFrom: process.env.SMTP_FROM || 'no-reply@quizapp.com',
+  // Email (Resend)
+  resendApiKey: process.env.RESEND_API_KEY,
+  emailFrom: process.env.EMAIL_FROM || 'QuizApp <no-reply@quizapp.com>',
 };
 
 const isProduction = env.nodeEnv === 'production';

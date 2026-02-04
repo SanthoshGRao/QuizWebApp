@@ -67,7 +67,8 @@ On your **backend** host, set these in the dashboard (e.g. Render, Railway):
 | `SUPABASE_URL` | `https://xxx.supabase.co` | From Supabase project |
 | `SUPABASE_SERVICE_ROLE_KEY` | `eyJ...` | From Supabase, keep secret |
 | `SUPABASE_STORAGE_BUCKET` | `question-images` | Optional |
-| `SMTP_*` | Your SMTP values | For password reset emails |
+| `RESEND_API_KEY` | `re_xxx` from Resend | For password reset / welcome emails |
+| `EMAIL_FROM` | `QuizApp <no-reply@quizapp.com>` | Verified sender address in Resend |
 
 ### 2.2 Frontend (website)
 

@@ -1,35 +1,17 @@
-import nodemailer from 'nodemailer';
-import { env } from '../config/env.js';
+import { Resend } from 'resend';
 
-let transporter;
-
-export function getTransporter() {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: env.smtpHost,
-      port: env.smtpPort,
-      secure: env.smtpPort === 465,
-      auth: {
-        user: env.smtpUser,
-        pass: env.smtpPass,
-      },
-    });
-  }
-  return transporter;
-}
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendEmail({ to, subject, html }) {
-  const tx = getTransporter();
   try {
-    await tx.sendMail({
-      from: env.smtpFrom,
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM,
       to,
       subject,
       html,
     });
   } catch (err) {
-    // Centralized logging for email issues. Callers can decide whether to swallow or surface.
-    console.error('[email] Failed to send email', {
+    console.error('[email] Failed to send email via Resend', {
       to,
       subject,
       error: err?.message || err,
