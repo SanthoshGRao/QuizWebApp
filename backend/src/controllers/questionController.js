@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../config/supabase.js';
-import { env } from '../config/env.js';
 import { createLog } from './logController.js';
 
 function validateOptions(options) {
@@ -13,52 +12,6 @@ function validateOptions(options) {
   return null;
 }
 
-let ensuredBucket = false;
-async function ensureStorageBucket() {
-  if (ensuredBucket) return;
-  try {
-    const { data: buckets, error } = await supabase.storage.listBuckets();
-    if (error) throw error;
-    const exists = (buckets || []).some((b) => b.name === env.supabaseStorageBucket);
-    if (!exists) {
-      const { error: createErr } = await supabase.storage.createBucket(env.supabaseStorageBucket, {
-        public: true,
-      });
-      if (createErr) throw createErr;
-    }
-    ensuredBucket = true;
-  } catch {
-    // If we can't ensure bucket (permissions/policy), uploads will fail with a clearer error later.
-  }
-}
-
-function extFromFile(file) {
-  const fromName = (file?.originalname || '').toLowerCase();
-  const idx = fromName.lastIndexOf('.');
-  if (idx >= 0 && idx < fromName.length - 1) return fromName.slice(idx);
-  const mime = (file?.mimetype || '').toLowerCase();
-  if (mime === 'image/png') return '.png';
-  if (mime === 'image/webp') return '.webp';
-  if (mime === 'image/gif') return '.gif';
-  return '.jpg';
-}
-
-async function uploadQuestionImage({ file, quizId }) {
-  if (!file?.buffer) return null;
-  await ensureStorageBucket();
-  const objectPath = `${quizId}/${uuidv4()}${extFromFile(file)}`;
-  const { error: upErr } = await supabase.storage.from(env.supabaseStorageBucket).upload(
-    objectPath,
-    file.buffer,
-    {
-      contentType: file.mimetype || 'image/jpeg',
-      upsert: true,
-    },
-  );
-  if (upErr) throw upErr;
-  const { data } = supabase.storage.from(env.supabaseStorageBucket).getPublicUrl(objectPath);
-  return data?.publicUrl || null;
-}
 
 export async function createQuestion(req, res, next) {
   try {
@@ -74,6 +27,7 @@ export async function createQuestion(req, res, next) {
       correct_option,
       latex,
       explanation,
+      image_url,
     } = req.body;
 
     const stem = (question_text ?? '').toString().trim();
@@ -110,7 +64,7 @@ export async function createQuestion(req, res, next) {
       return res.status(409).json({ message: 'This question already exists.' });
     }
 
-    const uploadedUrl = req.file ? await uploadQuestionImage({ file: req.file, quizId }) : null;
+    const imageUrl = image_url || null;
     const record = {
       id: uuidv4(),
       quiz_id: quizId,
@@ -122,8 +76,8 @@ export async function createQuestion(req, res, next) {
       option3: opt3,
       option4: opt4,
       correct_option,
-      image_url: uploadedUrl,
-      media_url: uploadedUrl,
+      image_url: imageUrl,
+      media_url: imageUrl,
       latex,
       explanation,
     };
@@ -151,11 +105,9 @@ export async function updateQuestion(req, res, next) {
     const { id } = req.params;
     const update = { ...req.body };
 
-    if (req.file) {
-      // quizId is used only for object path grouping; it does not affect public URL.
-      const uploadedUrl = await uploadQuestionImage({ file: req.file, quizId: 'questions' });
-      update.image_url = uploadedUrl;
-      update.media_url = uploadedUrl;
+    // If image_url is provided, use it (frontend uploads directly to Supabase Storage)
+    if ('image_url' in update) {
+      update.media_url = update.image_url;
     }
 
     if ('question_text' in update && (update.question_text ?? '').toString().trim().length === 0) {

@@ -8,6 +8,7 @@ import { BlockMath } from 'react-katex';
 import { Select } from '../../components/Select.jsx';
 import { FileUpload } from '../../components/FileUpload.jsx';
 import { ConfirmModal } from '../../components/Modal.jsx';
+import { uploadQuestionImage } from '../../utils/imageUpload.js';
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '');
 function resolveMediaUrl(url) {
@@ -118,30 +119,38 @@ export default function AdminQuestionManage() {
     }
     setSaving(true);
     try {
-      const fd = new FormData();
-      fd.append('question_text', form.question_text);
-      fd.append('type', form.type);
-      fd.append('paragraph', form.paragraph || '');
-      fd.append('option1', form.option1);
-      fd.append('option2', form.option2);
-      fd.append('option3', form.option3);
-      fd.append('option4', form.option4);
-      fd.append('correct_option', form.correct_option);
-      fd.append('latex', form.latex);
-      fd.append('explanation', form.explanation);
+      // Upload image directly to Supabase Storage if present
+      let imageUrl = null;
       if (form.imageFile) {
-        fd.append('image', form.imageFile);
+        try {
+          imageUrl = await uploadQuestionImage(form.imageFile, quizId);
+        } catch (uploadErr) {
+          addToast(uploadErr.message || 'Failed to upload image', 'error');
+          setSaving(false);
+          return;
+        }
       }
 
+      // Send JSON payload with image_url instead of FormData
+      const payload = {
+        question_text: form.question_text,
+        type: form.type,
+        paragraph: form.paragraph || '',
+        option1: form.option1,
+        option2: form.option2,
+        option3: form.option3,
+        option4: form.option4,
+        correct_option: form.correct_option,
+        latex: form.latex,
+        explanation: form.explanation,
+        ...(imageUrl && { image_url: imageUrl }),
+      };
+
       if (editing) {
-        await apiClient.put(`/quizzes/questions/${editing}`, fd, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await apiClient.put(`/quizzes/questions/${editing}`, payload);
         addToast('Question updated', 'success');
       } else {
-        await apiClient.post(`/quizzes/${quizId}/questions`, fd, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await apiClient.post(`/quizzes/${quizId}/questions`, payload);
         addToast('Question created', 'success');
       }
 

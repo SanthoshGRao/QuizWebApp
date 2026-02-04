@@ -14,9 +14,7 @@ import {
   updateQuestion,
   deleteQuestion,
 } from '../controllers/questionController.js';
-import multer from 'multer';
 
-const upload = multer({ storage: multer.memoryStorage() });
 const router = express.Router();
 
 router.use(authenticate);
@@ -30,8 +28,8 @@ router.post('/:quizId/auto-save', authorize(['student']), autoSaveAnswer);
 
 router.post('/', authorize(['admin']), createQuiz);
 router.post('/:quizId/add-from-bank', authorize(['admin']), addQuestionsFromBank);
-router.post('/:quizId/questions', authorize(['admin']), upload.single('image'), createQuestion);
-router.put('/questions/:id', authorize(['admin']), upload.single('image'), updateQuestion);
+router.post('/:quizId/questions', authorize(['admin']), createQuestion);
+router.put('/questions/:id', authorize(['admin']), updateQuestion);
 router.delete('/questions/:id', authorize(['admin']), deleteQuestion);
 
 export default router;
