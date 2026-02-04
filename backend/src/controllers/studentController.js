@@ -1,6 +1,6 @@
 import { parse } from 'csv-parse/sync';
 import { supabase } from '../config/supabase.js';
-import { createStudent, toInitialPassword } from '../services/userService.js';
+import { createStudent, createStudentsBulk, toInitialPassword } from '../services/userService.js';
 import { sendEmail } from '../services/emailService.js';
 import { decryptAnswer } from '../utils/crypto.js';
 import { shuffleQuestionsAndOptions } from './quizController.js';
@@ -47,8 +47,9 @@ export async function bulkUploadStudents(req, res, next) {
       });
     }
     if (!Array.isArray(records)) records = [];
-    const added = [];
+    const prepared = [];
     const failed = [];
+
     for (let i = 0; i < records.length; i++) {
       const r = records[i];
       const firstname = (r.firstname || r.first_name || r.FirstName || r['First Name'] || '').trim();
@@ -57,30 +58,63 @@ export async function bulkUploadStudents(req, res, next) {
       const email = (r.email || r.Email || '').trim();
       const className = (r.class || r.Class || '').trim();
       const name = [firstname, middlename, lastname].filter(Boolean).join(' ').trim() || email;
+
       if (!firstname || !lastname || !email || !className) {
-        failed.push({ email, name: name || email, reason: 'Missing required field (firstname, lastname, email, or class)' });
+        failed.push({
+          email,
+          name: name || email,
+          reason: 'Missing required field (firstname, lastname, email, or class)',
+        });
         continue;
       }
+
+      prepared.push({ firstname, middlename, lastname, email, className });
+    }
+
+    let createdStudents = [];
+    if (prepared.length) {
       try {
-        const student = await createStudent({ firstname, middlename, lastname, email, className });
-        const displayName = [firstname, middlename, lastname].filter(Boolean).join(' ');
-        const initialPassword = toInitialPassword(firstname, middlename, lastname);
-        added.push(student);
-        try {
-          await sendEmail({
-            to: email,
-            subject: 'Your Quiz App credentials',
-            html: `<p>Hello ${displayName},</p><p>Your login email is <b>${email}</b> and your temporary password is <b>${initialPassword}</b>. Please change it after first login.</p>`,
-          });
-        } catch (emailErr) {
-          failed.push({ email, name: displayName, reason: `Created but email not sent: ${emailErr.message || 'Send failed'}` });
-        }
+        createdStudents = await createStudentsBulk(prepared);
       } catch (createErr) {
         const msg = createErr.message || 'Create failed';
-        failed.push({ email, name, reason: msg.includes('duplicate') || msg.includes('unique') ? 'Email already exists' : msg });
+        // If the bulk insert fails entirely (e.g. Supabase constraint), mark all prepared as failed once.
+        for (const r of prepared) {
+          const name = [r.firstname, r.middlename, r.lastname].filter(Boolean).join(' ').trim() || r.email;
+          failed.push({
+            email: r.email,
+            name,
+            reason:
+              msg.includes('duplicate') || msg.includes('unique') || msg.includes('duplicate key')
+                ? 'One or more emails already exist'
+                : msg,
+          });
+        }
+        createdStudents = [];
       }
     }
-    res.json({ added: added.length, failed });
+
+    // Attempt to send emails for successfully created students.
+    // This still uses await in a loop, but it is I/O-bound email work and independent of DB writes.
+    for (const student of createdStudents) {
+      const displayName = [student.firstname, student.middlename, student.lastname].filter(Boolean).join(' ');
+      const initialPassword = toInitialPassword(student.firstname, student.middlename, student.lastname);
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await sendEmail({
+          to: student.email,
+          subject: 'Your Quiz App credentials',
+          html: `<p>Hello ${displayName || student.email},</p><p>Your login email is <b>${student.email}</b> and your temporary password is <b>${initialPassword}</b>. Please change it after first login.</p>`,
+        });
+      } catch (emailErr) {
+        failed.push({
+          email: student.email,
+          name: displayName || student.email,
+          reason: `Created but email not sent: ${emailErr.message || 'Send failed'}`,
+        });
+      }
+    }
+
+    res.json({ added: createdStudents.length, failed });
   } catch (err) {
     next(err);
   }
