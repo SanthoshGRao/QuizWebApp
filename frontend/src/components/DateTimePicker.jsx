@@ -20,12 +20,10 @@ export function DateTimePicker({ value, onChange, min, max, id, required, classN
           min={min}
           max={max}
           required={required}
-          className="datetime-input pl-11 font-mono tracking-tight"
+          className="datetime-input w-full h-11 pl-11 pr-4 text-sm font-medium tracking-normal"
+          style={{ lineHeight: '1.4' }}
         />
       </div>
-      <p className="mt-1 text-[11px] text-slate-500">
-        Format: <span className="font-mono">YYYY-MM-DD HH:mm</span>
-      </p>
     </div>
   );
 }
