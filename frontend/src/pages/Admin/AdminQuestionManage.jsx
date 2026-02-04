@@ -37,6 +37,7 @@ export default function AdminQuestionManage() {
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [activeTab, setActiveTab] = useState('manual'); // 'manual' | 'file' | 'bank'
+  const [importTab, setImportTab] = useState('bank');
   const [bankQuestions, setBankQuestions] = useState([]);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankSelectedIds, setBankSelectedIds] = useState([]);
