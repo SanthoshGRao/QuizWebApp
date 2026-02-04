@@ -17,7 +17,13 @@ export default function AdminStudents() {
   const [creating, setCreating] = useState(false);
   const [file, setFile] = useState(null);
   const [activeTab, setActiveTab] = useState('manage');
-  const [bulkResult, setBulkResult] = useState({ open: false, added: 0, failed: [] });
+  const [bulkResult, setBulkResult] = useState({
+    open: false,
+    added: 0,
+    addedStudents: [],
+    skipped: [],
+    failed: [],
+  });
   const [performanceModal, setPerformanceModal] = useState({ open: false, data: null, loading: false });
   const [bulkFailedTab, setBulkFailedTab] = useState(false);
 
@@ -48,8 +54,11 @@ export default function AdminStudents() {
     e.preventDefault();
     setCreating(true);
     try {
-      await apiClient.post('/students', form);
-      addToast('Student created and credentials emailed', 'success');
+      const res = await apiClient.post('/students', form);
+      addToast('Student created. Reset email sent if possible.', 'success');
+      if (res.data?.emailNotice) {
+        addToast(res.data.emailNotice, 'error');
+      }
       setForm({ firstname: '', middlename: '', lastname: '', email: '', className: '' });
       load();
     } catch (err) {
@@ -70,16 +79,25 @@ export default function AdminStudents() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const added = res.data?.added ?? 0;
+      const skipped = Array.isArray(res.data?.skipped) ? res.data.skipped : [];
       const failed = Array.isArray(res.data?.failed) ? res.data.failed : [];
+      const addedStudents = Array.isArray(res.data?.addedStudents) ? res.data.addedStudents : [];
       setFile(null);
       load();
-      setBulkResult({ open: true, added, failed });
+      setBulkResult({ open: true, added, addedStudents, skipped, failed });
+      addToast(
+        `${added} student${added !== 1 ? 's' : ''} added, ${skipped.length} skipped, ${failed.length} failed`,
+        failed.length ? 'error' : 'success',
+      );
       setBulkFailedTab(failed.length > 0);
     } catch (err) {
-      const failed = err.response?.data?.failed;
-      const added = err.response?.data?.added ?? 0;
-      if (Array.isArray(failed)) {
-        setBulkResult({ open: true, added, failed });
+      const data = err.response?.data || {};
+      const added = data.added ?? 0;
+      const skipped = Array.isArray(data.skipped) ? data.skipped : [];
+      const failed = Array.isArray(data.failed) ? data.failed : [];
+      const addedStudents = Array.isArray(data.addedStudents) ? data.addedStudents : [];
+      if (Array.isArray(failed) || Array.isArray(skipped) || Array.isArray(addedStudents)) {
+        setBulkResult({ open: true, added, addedStudents, skipped, failed });
         setBulkFailedTab(true);
       } else {
         addToast(err.response?.data?.message || 'Bulk upload failed', 'error');
@@ -291,43 +309,75 @@ export default function AdminStudents() {
             </button>
           }
         >
-          <div className="space-y-4">
+          <div className="space-y-4 text-[11px]">
             <p className="text-emerald-300 font-medium">
-              {bulkResult.added} student{bulkResult.added !== 1 ? 's' : ''} added successfully.
+              {bulkResult.added} student{bulkResult.added !== 1 ? 's' : ''} added,{' '}
+              {bulkResult.skipped.length} skipped, {bulkResult.failed.length} failed.
             </p>
-            {bulkResult.failed.length > 0 && (
-              <div>
-                <div className="flex gap-2 border-b border-slate-700 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => setBulkFailedTab(false)}
-                    className={`px-2 py-1 text-[11px] ${!bulkFailedTab ? 'text-indigo-300 border-b-2 border-indigo-400' : 'text-slate-400'}`}
-                  >
-                    Summary
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBulkFailedTab(true)}
-                    className={`px-2 py-1 text-[11px] ${bulkFailedTab ? 'text-indigo-300 border-b-2 border-indigo-400' : 'text-slate-400'}`}
-                  >
-                    Failed ({bulkResult.failed.length})
-                  </button>
-                </div>
-                {!bulkFailedTab ? (
-                  <p className="text-slate-400 text-[11px]">
-                    {bulkResult.failed.length} row(s) could not be added. Open the &quot;Failed&quot; tab to see reasons.
-                  </p>
-                ) : (
-                  <div className="max-h-48 overflow-auto space-y-2 text-[11px]">
-                    {bulkResult.failed.map((f, i) => (
-                      <div key={i} className="rounded-lg border border-red-500/30 bg-red-500/5 px-2 py-1.5">
-                        <span className="text-slate-200">{f.name || f.email || 'Row ' + (i + 1)}</span>
-                        {f.email && f.email !== (f.name || '') && <span className="text-slate-500"> ({f.email})</span>}
-                        <div className="text-red-300/90 mt-0.5">{f.reason}</div>
-                      </div>
-                    ))}
+            <div className="flex gap-2 border-b border-slate-700 mb-2">
+              <button
+                type="button"
+                onClick={() => setBulkFailedTab(false)}
+                className={`px-2 py-1 ${!bulkFailedTab ? 'text-indigo-300 border-b-2 border-indigo-400' : 'text-slate-400'}`}
+              >
+                Summary
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkFailedTab(true)}
+                className={`px-2 py-1 ${bulkFailedTab ? 'text-indigo-300 border-b-2 border-indigo-400' : 'text-slate-400'}`}
+              >
+                Failed ({bulkResult.failed.length})
+              </button>
+            </div>
+            {!bulkFailedTab ? (
+              <div className="space-y-3">
+                {bulkResult.addedStudents.length > 0 && (
+                  <div>
+                    <div className="text-slate-300 font-medium mb-1">Added students</div>
+                    <div className="max-h-32 overflow-auto space-y-1">
+                      {bulkResult.addedStudents.map((s) => (
+                        <div
+                          key={s.id}
+                          className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-2 py-1 flex justify-between"
+                        >
+                          <span className="text-slate-100 text-[11px]">{s.name || s.email}</span>
+                          <span className="text-slate-400 text-[10px]">{s.email}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+                {bulkResult.skipped.length > 0 && (
+                  <div>
+                    <div className="text-slate-300 font-medium mb-1">Skipped (duplicates)</div>
+                    <div className="max-h-24 overflow-auto space-y-1">
+                      {bulkResult.skipped.map((s, i) => (
+                        <div
+                          key={`${s.email || i}`}
+                          className="rounded-lg border border-slate-600/60 bg-slate-900/60 px-2 py-1"
+                        >
+                          <span className="text-slate-200">{s.name || s.email}</span>
+                          {s.email && <span className="text-slate-500"> ({s.email})</span>}
+                          {s.reason && <div className="text-slate-400 mt-0.5">{s.reason}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {bulkResult.failed.length === 0 && bulkResult.skipped.length === 0 && bulkResult.addedStudents.length === 0 && (
+                  <p className="text-slate-400">No details available.</p>
+                )}
+              </div>
+            ) : (
+              <div className="max-h-48 overflow-auto space-y-2">
+                {bulkResult.failed.map((f, i) => (
+                  <div key={i} className="rounded-lg border border-red-500/30 bg-red-500/5 px-2 py-1.5">
+                    <span className="text-slate-200">{f.name || f.email || 'Row ' + (i + 1)}</span>
+                    {f.email && f.email !== (f.name || '') && <span className="text-slate-500"> ({f.email})</span>}
+                    <div className="text-red-300/90 mt-0.5">{f.reason}</div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

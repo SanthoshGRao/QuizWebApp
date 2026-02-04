@@ -1,9 +1,35 @@
 import { parse } from 'csv-parse/sync';
+import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../config/supabase.js';
-import { createStudent, createStudentsBulk, toInitialPassword } from '../services/userService.js';
+import { env } from '../config/env.js';
+import { createStudent, createStudentsBulk } from '../services/userService.js';
 import { sendEmail } from '../services/emailService.js';
 import { decryptAnswer } from '../utils/crypto.js';
 import { shuffleQuestionsAndOptions } from './quizController.js';
+
+async function sendAccountResetEmailForUser(user) {
+  if (!user || !user.id || !user.email) return;
+
+  const token = uuidv4();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+  const { error } = await supabase.from('password_resets').insert([
+    {
+      id: uuidv4(),
+      user_id: user.id,
+      token,
+      expires_at: expiresAt,
+      used: false,
+    },
+  ]);
+  if (error) throw error;
+
+  const resetLink = `${env.clientUrl}/reset-password?token=${token}`;
+  await sendEmail({
+    to: user.email,
+    subject: 'Your Quiz App account',
+    html: `<p>Hello ${user.name || user.email},</p><p>Your account has been created. Please reset your password using the following link:</p><p><a href="${resetLink}">Reset your password</a></p><p>This link expires in 1 hour.</p>`,
+  });
+}
 
 export async function addStudent(req, res, next) {
   try {
@@ -12,13 +38,15 @@ export async function addStudent(req, res, next) {
       return res.status(400).json({ message: 'First name, last name, email and class are required' });
     }
     const student = await createStudent({ firstname, middlename, lastname, email, className });
-    const displayName = [firstname, middlename, lastname].filter(Boolean).join(' ');
-    const initialPassword = toInitialPassword(firstname, middlename, lastname);
-    await sendEmail({
-      to: email,
-      subject: 'Your Quiz App credentials',
-      html: `<p>Hello ${displayName},</p><p>Your login email is <b>${email}</b> and your temporary password is <b>${initialPassword}</b>. Please change it after first login.</p>`,
-    });
+    try {
+      await sendAccountResetEmailForUser(student);
+    } catch (emailErr) {
+      // Surface email errors but keep clear message
+      return res.status(201).json({
+        ...student,
+        emailNotice: emailErr.message || 'Account created but reset email could not be sent',
+      });
+    }
     res.status(201).json(student);
   } catch (err) {
     next(err);
@@ -71,50 +99,45 @@ export async function bulkUploadStudents(req, res, next) {
       prepared.push({ firstname, middlename, lastname, email, className });
     }
 
-    let createdStudents = [];
+    let inserted = [];
+    let skipped = [];
+    let serviceFailed = [];
     if (prepared.length) {
-      try {
-        createdStudents = await createStudentsBulk(prepared);
-      } catch (createErr) {
-        const msg = createErr.message || 'Create failed';
-        // If the bulk insert fails entirely (e.g. Supabase constraint), mark all prepared as failed once.
-        for (const r of prepared) {
-          const name = [r.firstname, r.middlename, r.lastname].filter(Boolean).join(' ').trim() || r.email;
-          failed.push({
-            email: r.email,
-            name,
-            reason:
-              msg.includes('duplicate') || msg.includes('unique') || msg.includes('duplicate key')
-                ? 'One or more emails already exist'
-                : msg,
-          });
-        }
-        createdStudents = [];
-      }
+      const bulkResult = await createStudentsBulk(prepared);
+      inserted = bulkResult.inserted || [];
+      skipped = bulkResult.skipped || [];
+      serviceFailed = bulkResult.failed || [];
     }
 
-    // Attempt to send emails for successfully created students.
-    // This still uses await in a loop, but it is I/O-bound email work and independent of DB writes.
-    for (const student of createdStudents) {
-      const displayName = [student.firstname, student.middlename, student.lastname].filter(Boolean).join(' ');
-      const initialPassword = toInitialPassword(student.firstname, student.middlename, student.lastname);
+    // Map service-level failures into failed entries
+    for (const f of serviceFailed) {
+      failed.push({
+        email: f.email,
+        name: f.name || f.email,
+        reason: f.reason || 'Create failed',
+      });
+    }
+
+    // Attempt to send reset emails for successfully created students
+    for (const student of inserted) {
       try {
         // eslint-disable-next-line no-await-in-loop
-        await sendEmail({
-          to: student.email,
-          subject: 'Your Quiz App credentials',
-          html: `<p>Hello ${displayName || student.email},</p><p>Your login email is <b>${student.email}</b> and your temporary password is <b>${initialPassword}</b>. Please change it after first login.</p>`,
-        });
+        await sendAccountResetEmailForUser(student);
       } catch (emailErr) {
         failed.push({
           email: student.email,
-          name: displayName || student.email,
+          name: student.name || student.email,
           reason: `Created but email not sent: ${emailErr.message || 'Send failed'}`,
         });
       }
     }
 
-    res.json({ added: createdStudents.length, failed });
+    res.json({
+      added: inserted.length,
+      addedStudents: inserted,
+      skipped,
+      failed,
+    });
   } catch (err) {
     next(err);
   }
