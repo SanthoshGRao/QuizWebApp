@@ -15,27 +15,29 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
+    e.preventDefault();
+    setLoading(true);
 
-  try {
-    const res = await apiClient.post('/auth/login', {
-      email,
-      password,
-      rememberMe: remember,
-    });
+    try {
+      const res = await apiClient.post('/auth/login', {
+        email,
+        password,
+        rememberMe: remember,
+      });
 
-    login(res.data.token, res.data.user, navigate);
+      login(res.data.token, res.data.user, navigate);
 
-    if (!res.data.user?.first_login) {
-      addToast('Logged in successfully', 'success');
+      if (res.data.requirePasswordReset) {
+        addToast('Please change your password before continuing.', 'info');
+      } else if (!res.data.user?.first_login) {
+        addToast('Logged in successfully', 'success');
+      }
+    } catch (err) {
+      addToast(err.response?.data?.message || 'Login failed', 'error');
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    addToast(err.response?.data?.message || 'Login failed', 'error');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
 
   return (

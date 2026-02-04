@@ -71,7 +71,7 @@ export async function login(req, res, next) {
     });
 
     console.log('[auth] Login success', { userId: user.id, first_login: user.first_login });
-    return res.json({
+    const baseResponse = {
       token,
       user: {
         id: user.id,
@@ -81,7 +81,17 @@ export async function login(req, res, next) {
         class: user.class,
         first_login: user.first_login,
       },
-    });
+    };
+
+    if (user.first_login) {
+      return res.json({
+        ...baseResponse,
+        requirePasswordReset: true,
+        redirect: '/first-reset',
+      });
+    }
+
+    return res.json(baseResponse);
   } catch (err) {
     next(err);
   }
@@ -139,11 +149,20 @@ export async function forgotPassword(req, res, next) {
     if (error) throw error;
 
     const resetLink = `${env.clientUrl}/reset-password?token=${token}`;
-    await sendEmail({
-      to: user.email,
-      subject: 'Password reset',
-      html: `<p>Hello ${user.name},</p><p>Click <a href="${resetLink}">here</a> to reset your password. This link expires in 1 hour.</p>`,
-    });
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: 'Your Quiz App Account',
+        html: `<p>Hello ${user.name || user.email},</p><p>You requested a password reset.</p><p>Please reset your password here: <a href="${resetLink}">${resetLink}</a></p><p>This link expires in 1 hour.</p>`,
+      });
+    } catch (emailErr) {
+      // Log but do not block API response
+      console.error('[auth] Failed to send forgot-password email', {
+        userId: user.id,
+        email: user.email,
+        error: emailErr?.message || emailErr,
+      });
+    }
     await createLog({
       userId: user.id,
       action: 'Password reset requested',

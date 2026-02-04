@@ -2,37 +2,29 @@ import { parse } from 'csv-parse/sync';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../config/supabase.js';
 import { env } from '../config/env.js';
-import { createStudent, createStudentsBulk } from '../services/userService.js';
+import { createStudent, createStudentsBulk, generateInitialPassword } from '../services/userService.js';
 import { sendEmail } from '../services/emailService.js';
 import { decryptAnswer } from '../utils/crypto.js';
 import { shuffleQuestionsAndOptions } from './quizController.js';
 
-async function sendAccountResetEmailForUser(user) {
+async function sendWelcomeEmail(user) {
   if (!user || !user.id || !user.email) return;
 
-  try {
-    const token = uuidv4();
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
-    const { error } = await supabase.from('password_resets').insert([
-      {
-        id: uuidv4(),
-        user_id: user.id,
-        token,
-        expires_at: expiresAt,
-        used: false,
-      },
-    ]);
-    if (error) throw error;
+  const initialPassword = generateInitialPassword(user.firstname, user.middlename, user.lastname);
+  const resetLink = `${env.clientUrl}/first-reset`;
 
-    const resetLink = `${env.clientUrl}/reset-password?token=${token}`;
+  try {
     await sendEmail({
       to: user.email,
-      subject: 'Your Quiz App account',
-      html: `<p>Hello ${user.name || user.email},</p><p>Your account has been created. Please reset your password using the following link:</p><p><a href="${resetLink}">Reset your password</a></p><p>This link expires in 1 hour.</p>`,
+      subject: 'Your Quiz App Account',
+      html: `<p>Hello ${user.name || user.email},</p>
+<p>Your account has been created.</p>
+<p>Initial password: <strong>${initialPassword}</strong></p>
+<p>Please reset your password here: <a href="${resetLink}">${resetLink}</a></p>`,
     });
   } catch (err) {
     // Email failures must never break student creation
-    console.error('[students] Failed to send account reset email', {
+    console.error('[students] Failed to send welcome email', {
       userId: user.id,
       email: user.email,
       error: err?.message || err,
@@ -57,8 +49,8 @@ export async function addStudent(req, res, next) {
         .json({ message: 'First name, last name, email and class are required' });
     }
     const student = await createStudent({ firstname, middlename, lastname, email, className });
-    // Fire-and-forget email sending – do not block request lifecycle
-    Promise.resolve().then(() => sendAccountResetEmailForUser(student));
+    // Fire-and-forget welcome email with initial password – do not block request lifecycle
+    Promise.resolve().then(() => sendWelcomeEmail(student));
 
     handled = true;
     return res.status(201).json(student);
@@ -146,11 +138,11 @@ export async function bulkUploadStudents(req, res, next) {
       });
     }
 
-    // Attempt to send reset emails for successfully created students in a non-blocking way
+    // Attempt to send welcome emails for successfully created students in a non-blocking way
     if (inserted.length) {
       // Fire-and-forget; Promise.allSettled ensures internal rejections are handled
       Promise.resolve().then(() =>
-        Promise.allSettled(inserted.map((student) => sendAccountResetEmailForUser(student))),
+        Promise.allSettled(inserted.map((student) => sendWelcomeEmail(student))),
       );
     }
 

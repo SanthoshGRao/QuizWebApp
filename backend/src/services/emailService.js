@@ -20,11 +20,21 @@ export function getTransporter() {
 
 export async function sendEmail({ to, subject, html }) {
   const tx = getTransporter();
-  await tx.sendMail({
-    from: env.smtpFrom,
-    to,
-    subject,
-    html,
-  });
+  try {
+    await tx.sendMail({
+      from: env.smtpFrom,
+      to,
+      subject,
+      html,
+    });
+  } catch (err) {
+    // Centralized logging for email issues. Callers can decide whether to swallow or surface.
+    console.error('[email] Failed to send email', {
+      to,
+      subject,
+      error: err?.message || err,
+    });
+    throw err;
+  }
 }
 
