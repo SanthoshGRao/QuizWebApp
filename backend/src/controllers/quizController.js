@@ -431,8 +431,6 @@ export async function submitQuiz(req, res, next) {
       .select('id, correct_option, option1, option2, option3, option4')
       .eq('quiz_id', quizId);
     if (qError) throw qError;
-
-    // Use same shuffle as student saw when loading quiz
     const correctMap = new Map(questions.map((q) => [q.id, q.correct_option]));
     let score = 0;
     const total = questions.length;
