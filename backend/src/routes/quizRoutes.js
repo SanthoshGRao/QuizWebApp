@@ -6,6 +6,7 @@ import {
   getQuizDetail,
   submitQuiz,
   autoSaveAnswer,
+  addQuestionsFromBank,
 } from '../controllers/quizController.js';
 import { startAttempt, getAttempt } from '../controllers/attemptController.js';
 import {
@@ -28,6 +29,7 @@ router.post('/:quizId/submit', authorize(['student']), submitQuiz);
 router.post('/:quizId/auto-save', authorize(['student']), autoSaveAnswer);
 
 router.post('/', authorize(['admin']), createQuiz);
+router.post('/:quizId/add-from-bank', authorize(['admin']), addQuestionsFromBank);
 router.post('/:quizId/questions', authorize(['admin']), upload.single('image'), createQuestion);
 router.put('/questions/:id', authorize(['admin']), upload.single('image'), updateQuestion);
 router.delete('/questions/:id', authorize(['admin']), deleteQuestion);

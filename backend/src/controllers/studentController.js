@@ -6,6 +6,7 @@ import { createStudent, createStudentsBulk, generateInitialPassword } from '../s
 import { sendEmail } from '../services/emailService.js';
 import { decryptAnswer } from '../utils/crypto.js';
 import { shuffleQuestionsAndOptions } from './quizController.js';
+import { createNotification } from './notificationController.js';
 
 async function sendWelcomeEmail(user) {
   if (!user || !user.id || !user.email) return;
@@ -51,6 +52,36 @@ export async function addStudent(req, res, next) {
     const student = await createStudent({ firstname, middlename, lastname, email, className });
     // Fire-and-forget welcome email with initial password – do not block request lifecycle
     Promise.resolve().then(() => sendWelcomeEmail(student));
+    // Non-blocking in-app notification for the new student and admins
+    Promise.resolve().then(async () => {
+      try {
+        await createNotification({
+          userId: student.id,
+          title: 'Account created',
+          message: 'Your QuizApp account has been created. Please reset your password before first use.',
+          type: 'account',
+          entityId: student.id,
+        });
+        // Notify all admins about the new student
+        const { data: admins } = await supabase
+          .from('users')
+          .select('id')
+          .eq('role', 'admin');
+        for (const admin of admins || []) {
+          // best-effort; failures are swallowed inside createNotification
+          // eslint-disable-next-line no-await-in-loop
+          await createNotification({
+            userId: admin.id,
+            title: 'New student account created',
+            message: `${student.name || student.email} (${className}) was added.`,
+            type: 'admin_action',
+            entityId: student.id,
+          });
+        }
+      } catch {
+        // Notifications must never break student creation
+      }
+    });
 
     handled = true;
     return res.status(201).json(student);
@@ -142,8 +173,44 @@ export async function bulkUploadStudents(req, res, next) {
     if (inserted.length) {
       // Fire-and-forget; Promise.allSettled ensures internal rejections are handled
       Promise.resolve().then(() =>
-        Promise.allSettled(inserted.map((student) => sendWelcomeEmail(student))),
+        Promise.allSettled(
+          inserted.map(async (student) => {
+            await sendWelcomeEmail(student);
+            try {
+              await createNotification({
+                userId: student.id,
+                title: 'Account created',
+                message:
+                  'Your QuizApp account has been created from a bulk upload. Please reset your password before first use.',
+                type: 'account',
+                entityId: student.id,
+              });
+            } catch {
+              // ignore; non-fatal
+            }
+          }),
+        ),
       );
+      // Best-effort admin summary notification
+      Promise.resolve().then(async () => {
+        try {
+          const { data: admins } = await supabase
+            .from('users')
+            .select('id')
+            .eq('role', 'admin');
+          for (const admin of admins || []) {
+            // eslint-disable-next-line no-await-in-loop
+            await createNotification({
+              userId: admin.id,
+              title: 'Bulk students import completed',
+              message: `${inserted.length} student(s) added, ${skipped.length} skipped, ${failed.length} failed.`,
+              type: 'admin_action',
+            });
+          }
+        } catch {
+          // ignore
+        }
+      });
     }
 
     handled = true;
@@ -318,12 +385,22 @@ export async function updateMyProfile(req, res, next) {
 
 export async function listStudents(req, res, next) {
   try {
-    const { page = 1, limit = 10, className, name, email, search } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      className,
+      name,
+      email,
+      search,
+      class: classParam,
+    } = req.query;
+
+    const classFilter = classParam || className;
 
     let query = supabase.from('users').select('*', { count: 'exact' }).eq('role', 'student');
 
-    if (className) {
-      query = query.eq('class', className);
+    if (classFilter) {
+      query = query.eq('class', classFilter);
     }
     if (name) {
       query = query.ilike('name', `%${name}%`);

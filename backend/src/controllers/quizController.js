@@ -131,13 +131,34 @@ export async function publishQuizNow(req, res, next) {
       entityId: id,
     });
 
-    const { data: students } = await supabase.from('users').select('id').eq('role', 'student').eq('class', data.class);
+    const { data: students } = await supabase
+      .from('users')
+      .select('id')
+      .eq('role', 'student')
+      .eq('class', data.class);
     for (const s of students || []) {
+      // eslint-disable-next-line no-await-in-loop
       await createNotification({
         userId: s.id,
         title: 'New quiz available',
         message: `"${data.title}" is now live.`,
         type: 'quiz',
+        entityId: id,
+      });
+    }
+
+    // Notify all admins that a quiz was published
+    const { data: admins } = await supabase
+      .from('users')
+      .select('id')
+      .eq('role', 'admin');
+    for (const admin of admins || []) {
+      // eslint-disable-next-line no-await-in-loop
+      await createNotification({
+        userId: admin.id,
+        title: 'Quiz published',
+        message: `"${data.title}" was published for class ${data.class || '-'}.`,
+        type: 'admin_action',
         entityId: id,
       });
     }
@@ -273,6 +294,64 @@ export async function listQuizzes(req, res, next) {
     res.json(quizzes);
   } catch (err) {
     next(err);
+  }
+}
+
+export async function addQuestionsFromBank(req, res, next) {
+  try {
+    const { quizId } = req.params;
+    const bankQuestionIds = Array.isArray(req.body.bankQuestionIds)
+      ? req.body.bankQuestionIds
+      : [];
+
+    if (!quizId) {
+      return res.status(400).json({ message: 'quizId is required' });
+    }
+    if (!bankQuestionIds.length) {
+      return res.status(400).json({ message: 'No bank question IDs provided' });
+    }
+
+    const { data: bankQuestions, error: bankErr } = await supabase
+      .from('question_bank')
+      .select(
+        'id, question_text, type, paragraph, option1, option2, option3, option4, correct_option, explanation, latex',
+      )
+      .in('id', bankQuestionIds);
+    if (bankErr) throw bankErr;
+    if (!bankQuestions || !bankQuestions.length) {
+      return res.status(404).json({ message: 'No matching bank questions found' });
+    }
+
+    const rows = bankQuestions.map((q) => ({
+      id: uuidv4(),
+      quiz_id: quizId,
+      question_text: q.question_text,
+      type: q.type || 'text',
+      paragraph: q.paragraph || null,
+      option1: q.option1,
+      option2: q.option2,
+      option3: q.option3,
+      option4: q.option4,
+      correct_option: q.correct_option,
+      explanation: q.explanation || null,
+      latex: q.latex || null,
+    }));
+
+    const { data, error } = await supabase.from('questions').insert(rows).select();
+    if (error) throw error;
+
+    await createLog({
+      userId: req.user.id,
+      action: `Added ${rows.length} question(s) from bank to quiz`,
+      status: 'success',
+      ip: req.ip,
+      actionType: 'quiz_add_from_bank',
+      entityId: quizId,
+    });
+
+    return res.status(201).json({ added: rows.length, questions: data || [] });
+  } catch (err) {
+    return next(err);
   }
 }
 
@@ -432,6 +511,22 @@ export async function submitQuiz(req, res, next) {
       type: 'result',
       entityId: quizId,
     });
+
+    // Notify admins of the submission in a best-effort way
+    const { data: admins } = await supabase
+      .from('users')
+      .select('id')
+      .eq('role', 'admin');
+    for (const admin of admins || []) {
+      // eslint-disable-next-line no-await-in-loop
+      await createNotification({
+        userId: admin.id,
+        title: 'Quiz submitted',
+        message: `A quiz was submitted (quiz ID: ${quizId}).`,
+        type: 'admin_action',
+        entityId: quizId,
+      });
+    }
 
     res.json({ result });
   } catch (err) {

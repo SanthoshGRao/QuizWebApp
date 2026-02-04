@@ -19,6 +19,7 @@ export default function AdminQuestionBank() {
   const [file, setFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const load = () => {
     setLoading(true);
@@ -29,7 +30,10 @@ export default function AdminQuestionBank() {
     if (difficulty) params.difficulty = difficulty;
     apiClient
       .get('/bank', { params })
-      .then((r) => setQuestions(r.data.questions || []))
+      .then((r) => {
+        setQuestions(r.data.questions || []);
+        setSelectedIds([]);
+      })
       .catch(() => addToast('Failed to load bank', 'error'))
       .finally(() => setLoading(false));
   };
@@ -41,16 +45,44 @@ export default function AdminQuestionBank() {
 
   const handleSearch = () => load();
 
-  const handleClone = async (bankId) => {
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleSelectAllVisible = () => {
+    if (!questions.length) return;
+    const visibleIds = questions.map((q) => q.id);
+    const allSelected = visibleIds.every((id) => selectedIds.includes(id));
+    if (allSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const handleAddSelectedToQuiz = async () => {
     if (!cloneQuizId) {
       addToast('Select a quiz first', 'error');
       return;
     }
+    if (!selectedIds.length) {
+      addToast('Select at least one question from the bank', 'error');
+      return;
+    }
     try {
-      await apiClient.post(`/bank/${bankId}/clone`, { quizId: cloneQuizId });
-      addToast('Question added to quiz', 'success');
+      const res = await apiClient.post(`/quizzes/${cloneQuizId}/add-from-bank`, {
+        bankQuestionIds: selectedIds,
+      });
+      const added = res.data?.added ?? selectedIds.length;
+      addToast(
+        `${added} question${added !== 1 ? 's' : ''} added to quiz`,
+        'success',
+      );
+      setSelectedIds([]);
     } catch (err) {
-      addToast(err.response?.data?.message || 'Clone failed', 'error');
+      addToast(err.response?.data?.message || 'Failed to add questions to quiz', 'error');
     }
   };
 
@@ -120,10 +152,28 @@ export default function AdminQuestionBank() {
                 value={cloneQuizId}
                 onChange={setCloneQuizId}
                 options={[
-                  { value: '', label: 'Add to quiz…' },
+                  { value: '', label: 'Add selected to quiz…' },
                   ...quizzes.map((q) => ({ value: q.id, label: q.title })),
                 ]}
               />
+              <button
+                type="button"
+                onClick={handleSelectAllVisible}
+                className="px-3 py-2 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-800 text-xs"
+              >
+                {questions.length &&
+                questions.every((q) => selectedIds.includes(q.id))
+                  ? 'Clear selection'
+                  : 'Select all on page'}
+              </button>
+              <button
+                type="button"
+                onClick={handleAddSelectedToQuiz}
+                disabled={!cloneQuizId || !selectedIds.length}
+                className="px-4 py-2 rounded-xl bg-indigo-500/20 text-indigo-200 border border-indigo-500/40 hover:bg-indigo-500/30 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Add selected to quiz
+              </button>
               <button
                 type="button"
                 onClick={() => setShowImport(!showImport)}
@@ -159,10 +209,16 @@ export default function AdminQuestionBank() {
               </div>
             ) : (
               <div className="space-y-3">
-                {questions.map((q) => (
+                {questions.map((q) => {
+                  const checked = selectedIds.includes(q.id);
+                  return (
                   <div
                     key={q.id}
-                    className="group flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border border-slate-800/80 bg-slate-900/30 hover:bg-slate-800/40 hover:border-slate-700/80 transition"
+                    className={`group flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border ${
+                      checked
+                        ? 'border-indigo-500/60 bg-indigo-500/10'
+                        : 'border-slate-800/80 bg-slate-900/30 hover:bg-slate-800/40 hover:border-slate-700/80'
+                    } transition`}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-slate-100 leading-relaxed">
@@ -195,15 +251,19 @@ export default function AdminQuestionBank() {
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleClone(q.id)}
-                      disabled={!cloneQuizId}
-                      className="shrink-0 px-4 py-2 rounded-xl border border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/20 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Add to quiz
-                    </button>
+                    <div className="shrink-0 flex items-center gap-3">
+                      <label className="inline-flex items-center gap-2 text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
+                          checked={checked}
+                          onChange={() => toggleSelect(q.id)}
+                        />
+                        <span>Select</span>
+                      </label>
+                    </div>
                   </div>
-                ))}
+                );})}
                 {questions.length === 0 && (
                   <div className="py-16 text-center text-slate-500 text-sm rounded-xl border border-dashed border-slate-700">
                     No questions in bank. Use Import Excel/CSV or add questions from Quizzes.

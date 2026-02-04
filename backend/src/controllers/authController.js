@@ -5,6 +5,7 @@ import { findUserByEmail, findUserById, updatePassword, verifyPassword } from '.
 import { sendEmail } from '../services/emailService.js';
 import { env } from '../config/env.js';
 import { createLog } from './logController.js';
+import { createNotification } from './notificationController.js';
 
 export async function login(req, res, next) {
   try {
@@ -171,6 +172,17 @@ export async function forgotPassword(req, res, next) {
       actionType: 'password_reset_request',
       entityId: user.id,
     });
+
+    // Non-blocking in-app notification
+    Promise.resolve().then(() =>
+      createNotification({
+        userId: user.id,
+        title: 'Password reset requested',
+        message: 'If this was not you, please contact your administrator immediately.',
+        type: 'password_reset',
+        entityId: user.id,
+      }),
+    );
 
     return res.json({ message: 'If an account exists, reset email sent' });
   } catch (err) {

@@ -5,6 +5,7 @@ import { useToast } from '../../state/ToastContext.jsx';
 import { Spinner } from '../../components/Loading.jsx';
 import { FileUpload } from '../../components/FileUpload.jsx';
 import { Modal } from '../../components/Modal.jsx';
+import { Select } from '../../components/Select.jsx';
 
 export default function AdminStudents() {
   const { addToast } = useToast();
@@ -26,6 +27,7 @@ export default function AdminStudents() {
   });
   const [performanceModal, setPerformanceModal] = useState({ open: false, data: null, loading: false });
   const [bulkFailedTab, setBulkFailedTab] = useState(false);
+  const [classFilter, setClassFilter] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -35,6 +37,7 @@ export default function AdminStudents() {
           page,
           limit: 10,
           search: search || undefined,
+          class: classFilter || undefined,
         },
       })
       .then((res) => {
@@ -48,7 +51,7 @@ export default function AdminStudents() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search]);
+  }, [page, search, classFilter]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -130,6 +133,8 @@ export default function AdminStudents() {
   };
 
   const openPerformance = async (studentId) => {
+    // Prevent duplicate modal opens / requests from rapid clicks
+    if (performanceModal.loading) return;
     setPerformanceModal({ open: true, data: null, loading: true });
     try {
       const res = await apiClient.get(`/admin/students/${studentId}/performance`);
@@ -246,17 +251,34 @@ export default function AdminStudents() {
         {activeTab === 'list' && (
           <>
             <div className="card px-4 py-4 space-y-3 text-xs">
-              <Field label="Search">
-                <input
-                  className="input"
-                  value={search}
-                  onChange={(e) => {
-                    setPage(1);
-                    setSearch(e.target.value);
-                  }}
-                  placeholder="Search name or email"
-                />
-              </Field>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,2fr),minmax(0,1fr)] items-end">
+                <Field label="Search">
+                  <input
+                    className="input"
+                    value={search}
+                    onChange={(e) => {
+                      setPage(1);
+                      setSearch(e.target.value);
+                    }}
+                    placeholder="Search name or email"
+                  />
+                </Field>
+                <Field label="Class">
+                  <Select
+                    value={classFilter}
+                    onChange={(val) => {
+                      setPage(1);
+                      setClassFilter(val || '');
+                    }}
+                    options={[
+                      { value: '', label: 'All classes' },
+                      { value: 'Class A', label: 'Class A' },
+                      { value: 'Class B', label: 'Class B' },
+                      { value: 'Class C', label: 'Class C' },
+                    ]}
+                  />
+                </Field>
+              </div>
             </div>
             <div className="card px-4 py-4">
               <div className="flex items-center justify-between text-xs mb-3">

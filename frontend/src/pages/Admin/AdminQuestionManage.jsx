@@ -36,6 +36,12 @@ export default function AdminQuestionManage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [importTab, setImportTab] = useState('bank');
+  const [bankQuestions, setBankQuestions] = useState([]);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankSelectedIds, setBankSelectedIds] = useState([]);
+  const [bankSearch, setBankSearch] = useState('');
+  const [importPreview, setImportPreview] = useState([]);
 
   useEffect(() => {
     const load = async () => {
@@ -52,6 +58,25 @@ export default function AdminQuestionManage() {
     };
     load();
   }, [quizId, addToast]);
+
+  useEffect(() => {
+    if (importTab !== 'bank') return;
+    const loadBank = async () => {
+      setBankLoading(true);
+      try {
+        const params = {};
+        if (bankSearch) params.search = bankSearch;
+        const res = await apiClient.get('/bank', { params });
+        setBankQuestions(res.data?.questions || []);
+      } catch {
+        addToast('Failed to load question bank', 'error');
+      } finally {
+        setBankLoading(false);
+      }
+    };
+    loadBank();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importTab, bankSearch]);
 
   const onEdit = (q) => {
     setEditing(q.id);
@@ -130,6 +155,34 @@ export default function AdminQuestionManage() {
     }
   };
 
+  const toggleBankSelect = (id) => {
+    setBankSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleAddFromBank = async () => {
+    if (!bankSelectedIds.length) {
+      addToast('Select at least one question from the bank', 'error');
+      return;
+    }
+    try {
+      const res = await apiClient.post(`/quizzes/${quizId}/add-from-bank`, {
+        bankQuestionIds: bankSelectedIds,
+      });
+      const added = res.data?.added ?? bankSelectedIds.length;
+      addToast(
+        `${added} question${added !== 1 ? 's' : ''} added from bank`,
+        'success',
+      );
+      setBankSelectedIds([]);
+      const refreshed = await apiClient.get(`/quizzes/${quizId}`);
+      setQuestions(refreshed.data.questions || []);
+    } catch (err) {
+      addToast(err.response?.data?.message || 'Failed to add questions from bank', 'error');
+    }
+  };
+
   const handleExportQuiz = async () => {
     try {
       const res = await apiClient.get(`/import-export/quiz/${quizId}`, { responseType: 'blob' });
@@ -148,6 +201,12 @@ export default function AdminQuestionManage() {
   const handleImport = async (e) => {
     e.preventDefault();
     if (!importFile) return;
+    const name = importFile.name || '';
+    const lower = name.toLowerCase();
+    if (!(/\.(csv|xlsx|xls)$/.test(lower))) {
+      addToast('Please select a CSV or Excel file', 'error');
+      return;
+    }
     setImporting(true);
     try {
       const fd = new FormData();
@@ -156,6 +215,7 @@ export default function AdminQuestionManage() {
       const res = await apiClient.post('/import-export/questions', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       addToast(`${res.data.added} added, ${res.data.failed?.length || 0} failed`, res.data.failed?.length ? 'info' : 'success');
       setImportFile(null);
+      setImportPreview([]);
       const r = await apiClient.get(`/quizzes/${quizId}`);
       setQuestions(r.data.questions || []);
     } catch (err) {
@@ -445,25 +505,177 @@ export default function AdminQuestionManage() {
                 Import / Export
               </h2>
               <p className="text-sm text-slate-400 mb-4">
-                Import questions from Excel or CSV, or export this quiz with all questions and answers.
+                Add questions from the central Question Bank or import them from CSV/Excel.
               </p>
-              <div className="flex flex-wrap gap-4 items-end">
-                <form onSubmit={handleImport} className="flex flex-wrap gap-4 items-end">
-                  <FileUpload value={importFile} onChange={setImportFile} accept=".xlsx,.xls,.csv" hint="Excel/CSV" />
+              <div className="flex flex-col gap-4">
+                <div className="flex border-b border-slate-700 text-xs">
                   <button
-                    type="submit"
-                    disabled={!importFile || importing}
-                    className="btn-primary px-5 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                    type="button"
+                    onClick={() => setImportTab('bank')}
+                    className={`px-3 py-2 border-b-2 ${
+                      importTab === 'bank'
+                        ? 'border-indigo-400 text-slate-100'
+                        : 'border-transparent text-slate-400 hover:text-slate-200'
+                    }`}
                   >
-                    {importing ? <Spinner /> : 'Import'}
+                    Add from Question Bank
                   </button>
-                </form>
-                <button
-                  onClick={handleExportQuiz}
-                  className="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-700 hover:border-slate-600 text-sm font-medium transition"
-                >
-                  Export quiz
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportTab('file')}
+                    className={`px-3 py-2 border-b-2 ${
+                      importTab === 'file'
+                        ? 'border-indigo-400 text-slate-100'
+                        : 'border-transparent text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Import from CSV/Excel
+                  </button>
+                  <div className="ml-auto flex items-center">
+                    <button
+                      onClick={handleExportQuiz}
+                      type="button"
+                      className="px-4 py-2 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-700 hover:border-slate-600 text-xs font-medium transition"
+                    >
+                      Export quiz
+                    </button>
+                  </div>
+                </div>
+
+                {importTab === 'bank' && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-3 items-end text-xs">
+                      <div className="w-full md:w-64">
+                        <Field label="Search in bank">
+                          <input
+                            className="input"
+                            value={bankSearch}
+                            onChange={(e) => setBankSearch(e.target.value)}
+                            placeholder="Search bank questions..."
+                          />
+                        </Field>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddFromBank}
+                        disabled={!bankSelectedIds.length || bankLoading}
+                        className="btn-primary px-4 py-2 text-xs rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {bankLoading ? <Spinner /> : `Add selected (${bankSelectedIds.length})`}
+                      </button>
+                    </div>
+                    <div className="max-h-72 overflow-auto space-y-2 pr-1">
+                      {bankLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Spinner />
+                        </div>
+                      ) : bankQuestions.length ? (
+                        bankQuestions.map((q) => {
+                          const checked = bankSelectedIds.includes(q.id);
+                          return (
+                            <div
+                              key={q.id}
+                              className={`flex items-start gap-3 rounded-xl border px-3 py-2 text-xs cursor-pointer ${
+                                checked
+                                  ? 'border-indigo-500/60 bg-indigo-500/10'
+                                  : 'border-slate-700/80 bg-slate-900/40 hover:bg-slate-800/50 hover:border-slate-600/80'
+                              }`}
+                              onClick={() => toggleBankSelect(q.id)}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
+                                checked={checked}
+                                onChange={() => toggleBankSelect(q.id)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-slate-100 text-sm">
+                                  {q.question_text?.slice(0, 140)}
+                                  {(q.question_text?.length || 0) > 140 ? '…' : ''}
+                                </div>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {q.subject && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[11px]">
+                                      {q.subject}
+                                    </span>
+                                  )}
+                                  {q.topic && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[11px]">
+                                      {q.topic}
+                                    </span>
+                                  )}
+                                  {q.difficulty && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] capitalize bg-slate-800 text-slate-400">
+                                      {q.difficulty}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="py-10 text-center text-slate-500 text-sm border border-dashed border-slate-700 rounded-xl">
+                          No questions in bank yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {importTab === 'file' && (
+                  <div className="space-y-3">
+                    <form onSubmit={handleImport} className="flex flex-wrap gap-4 items-end">
+                      <FileUpload
+                        value={importFile}
+                        onChange={(file) => {
+                          setImportFile(file);
+                          setImportPreview([]);
+                          if (file && file.name?.toLowerCase().endsWith('.csv')) {
+                            const reader = new FileReader();
+                            reader.onload = (evt) => {
+                              const text = String(evt.target?.result || '');
+                              const lines = text.split(/\r?\n/).slice(0, 5);
+                              setImportPreview(lines.filter(Boolean));
+                            };
+                            reader.readAsText(file);
+                          }
+                        }}
+                        accept=".xlsx,.xls,.csv"
+                        hint="CSV or Excel (.csv, .xlsx, .xls)"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!importFile || importing}
+                        className="btn-primary px-5 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {importing ? <Spinner /> : 'Import'}
+                      </button>
+                    </form>
+                    {importFile && (
+                      <div className="rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-400 space-y-1">
+                        <div>
+                          <span className="font-medium text-slate-200">Selected file:</span>{' '}
+                          <span className="font-mono">{importFile.name}</span>
+                        </div>
+                        {importPreview.length ? (
+                          <div>
+                            <div className="text-slate-300 mb-1">Preview (first few lines):</div>
+                            <pre className="max-h-32 overflow-auto text-[10px] bg-slate-900/80 rounded-lg px-2 py-1 whitespace-pre-wrap">
+                              {importPreview.join('\n')}
+                            </pre>
+                          </div>
+                        ) : (
+                          <div>
+                            Preview is available for CSV files. For Excel files, please verify columns match the
+                            template before importing.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
           )}

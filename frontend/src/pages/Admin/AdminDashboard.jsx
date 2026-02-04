@@ -3,7 +3,6 @@ import { apiClient } from '../../api/client.js';
 import { useToast } from '../../state/ToastContext.jsx';
 import { AppLayout } from '../../components/Layout.jsx';
 import { Spinner } from '../../components/Loading.jsx';
-import { NotificationCenter } from '../../components/NotificationCenter.jsx';
 
 export default function AdminDashboard() {
   const { addToast } = useToast();
@@ -35,9 +34,6 @@ export default function AdminDashboard() {
                 Overview of your quiz app
               </p>
             </header>
-            <div className="flex items-center">
-              <NotificationCenter />
-            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
