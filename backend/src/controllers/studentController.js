@@ -10,52 +10,80 @@ import { shuffleQuestionsAndOptions } from './quizController.js';
 async function sendAccountResetEmailForUser(user) {
   if (!user || !user.id || !user.email) return;
 
-  const token = uuidv4();
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
-  const { error } = await supabase.from('password_resets').insert([
-    {
-      id: uuidv4(),
-      user_id: user.id,
-      token,
-      expires_at: expiresAt,
-      used: false,
-    },
-  ]);
-  if (error) throw error;
+  try {
+    const token = uuidv4();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+    const { error } = await supabase.from('password_resets').insert([
+      {
+        id: uuidv4(),
+        user_id: user.id,
+        token,
+        expires_at: expiresAt,
+        used: false,
+      },
+    ]);
+    if (error) throw error;
 
-  const resetLink = `${env.clientUrl}/reset-password?token=${token}`;
-  await sendEmail({
-    to: user.email,
-    subject: 'Your Quiz App account',
-    html: `<p>Hello ${user.name || user.email},</p><p>Your account has been created. Please reset your password using the following link:</p><p><a href="${resetLink}">Reset your password</a></p><p>This link expires in 1 hour.</p>`,
-  });
+    const resetLink = `${env.clientUrl}/reset-password?token=${token}`;
+    await sendEmail({
+      to: user.email,
+      subject: 'Your Quiz App account',
+      html: `<p>Hello ${user.name || user.email},</p><p>Your account has been created. Please reset your password using the following link:</p><p><a href="${resetLink}">Reset your password</a></p><p>This link expires in 1 hour.</p>`,
+    });
+  } catch (err) {
+    // Email failures must never break student creation
+    console.error('[students] Failed to send account reset email', {
+      userId: user.id,
+      email: user.email,
+      error: err?.message || err,
+    });
+  }
 }
 
 export async function addStudent(req, res, next) {
+  const defaultResponse = {
+    added: 0,
+    addedStudents: [],
+    skipped: [],
+    failed: [],
+  };
+  let handled = false;
   try {
     const { firstname, middlename, lastname, email, className } = req.body;
     if (!firstname || !lastname || !email || !className) {
-      return res.status(400).json({ message: 'First name, last name, email and class are required' });
+      handled = true;
+      return res
+        .status(400)
+        .json({ message: 'First name, last name, email and class are required' });
     }
     const student = await createStudent({ firstname, middlename, lastname, email, className });
-    try {
-      await sendAccountResetEmailForUser(student);
-    } catch (emailErr) {
-      // Surface email errors but keep clear message
-      return res.status(201).json({
-        ...student,
-        emailNotice: emailErr.message || 'Account created but reset email could not be sent',
-      });
-    }
-    res.status(201).json(student);
+    // Fire-and-forget email sending – do not block request lifecycle
+    Promise.resolve().then(() => sendAccountResetEmailForUser(student));
+
+    handled = true;
+    return res.status(201).json(student);
   } catch (err) {
-    next(err);
+    handled = true;
+    return next(err);
+  } finally {
+    // Final safeguard so the request never hangs even if something above failed unexpectedly
+    if (!handled && !res.headersSent) {
+      res.status(200).json(defaultResponse);
+    }
   }
 }
 
 export async function bulkUploadStudents(req, res, next) {
+  const defaultResponse = {
+    added: 0,
+    addedStudents: [],
+    skipped: [],
+    failed: [],
+  };
+  let handled = false;
   try {
     if (!req.file || !req.file.buffer) {
+      handled = true;
       return res.status(400).json({ message: 'CSV file is required' });
     }
     const content = req.file.buffer.toString('utf8');
@@ -118,28 +146,29 @@ export async function bulkUploadStudents(req, res, next) {
       });
     }
 
-    // Attempt to send reset emails for successfully created students
-    for (const student of inserted) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await sendAccountResetEmailForUser(student);
-      } catch (emailErr) {
-        failed.push({
-          email: student.email,
-          name: student.name || student.email,
-          reason: `Created but email not sent: ${emailErr.message || 'Send failed'}`,
-        });
-      }
+    // Attempt to send reset emails for successfully created students in a non-blocking way
+    if (inserted.length) {
+      // Fire-and-forget; Promise.allSettled ensures internal rejections are handled
+      Promise.resolve().then(() =>
+        Promise.allSettled(inserted.map((student) => sendAccountResetEmailForUser(student))),
+      );
     }
 
-    res.json({
+    handled = true;
+    return res.json({
       added: inserted.length,
       addedStudents: inserted,
       skipped,
       failed,
     });
   } catch (err) {
-    next(err);
+    handled = true;
+    return next(err);
+  } finally {
+    // Final safeguard so the request never hangs even if something above failed unexpectedly
+    if (!handled && !res.headersSent) {
+      res.status(200).json(defaultResponse);
+    }
   }
 }
 

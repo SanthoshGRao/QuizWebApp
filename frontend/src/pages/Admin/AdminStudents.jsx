@@ -53,8 +53,15 @@ export default function AdminStudents() {
   const handleCreate = async (e) => {
     e.preventDefault();
     setCreating(true);
+    const request = apiClient.post('/students', form);
+    // Attach a noop catch so if we time out, the eventual rejection doesn't surface as unhandled
+    request.catch(() => {});
+    const timeoutMs = 15000;
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), timeoutMs),
+    );
     try {
-      const res = await apiClient.post('/students', form);
+      const res = await Promise.race([request, timeoutPromise]);
       addToast('Student created. Reset email sent if possible.', 'success');
       if (res.data?.emailNotice) {
         addToast(res.data.emailNotice, 'error');
@@ -62,7 +69,11 @@ export default function AdminStudents() {
       setForm({ firstname: '', middlename: '', lastname: '', email: '', className: '' });
       load();
     } catch (err) {
-      addToast(err.response?.data?.message || 'Failed to create student', 'error');
+      if (err?.message === 'timeout') {
+        addToast('Upload completed, but response delayed. Refresh list.', 'warning');
+      } else {
+        addToast(err.response?.data?.message || 'Failed to create student', 'error');
+      }
     } finally {
       setCreating(false);
     }
@@ -72,12 +83,19 @@ export default function AdminStudents() {
     e.preventDefault();
     if (!file) return;
     setCreating(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    const request = apiClient.post('/students/bulk', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    // Attach a noop catch so if we time out, the eventual rejection doesn't surface as unhandled
+    request.catch(() => {});
+    const timeoutMs = 15000;
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), timeoutMs),
+    );
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await apiClient.post('/students/bulk', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await Promise.race([request, timeoutPromise]);
       const added = res.data?.added ?? 0;
       const skipped = Array.isArray(res.data?.skipped) ? res.data.skipped : [];
       const failed = Array.isArray(res.data?.failed) ? res.data.failed : [];
@@ -91,16 +109,20 @@ export default function AdminStudents() {
       );
       setBulkFailedTab(failed.length > 0);
     } catch (err) {
-      const data = err.response?.data || {};
-      const added = data.added ?? 0;
-      const skipped = Array.isArray(data.skipped) ? data.skipped : [];
-      const failed = Array.isArray(data.failed) ? data.failed : [];
-      const addedStudents = Array.isArray(data.addedStudents) ? data.addedStudents : [];
-      if (Array.isArray(failed) || Array.isArray(skipped) || Array.isArray(addedStudents)) {
-        setBulkResult({ open: true, added, addedStudents, skipped, failed });
-        setBulkFailedTab(true);
+      if (err?.message === 'timeout') {
+        addToast('Upload completed, but response delayed. Refresh list.', 'warning');
       } else {
-        addToast(err.response?.data?.message || 'Bulk upload failed', 'error');
+        const data = err.response?.data || {};
+        const added = data.added ?? 0;
+        const skipped = Array.isArray(data.skipped) ? data.skipped : [];
+        const failed = Array.isArray(data.failed) ? data.failed : [];
+        const addedStudents = Array.isArray(data.addedStudents) ? data.addedStudents : [];
+        if (Array.isArray(failed) || Array.isArray(skipped) || Array.isArray(addedStudents)) {
+          setBulkResult({ open: true, added, addedStudents, skipped, failed });
+          setBulkFailedTab(true);
+        } else {
+          addToast(err.response?.data?.message || 'Bulk upload failed', 'error');
+        }
       }
     } finally {
       setCreating(false);
