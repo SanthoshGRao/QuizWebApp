@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../config/supabase.js';
 
 const SALT_ROUNDS = 10;
+// Slightly lower cost factor for bulk creation to avoid timeouts
+const BULK_SALT_ROUNDS = 8;
 
 export async function findUserByEmail(email) {
   const normalized = typeof email === 'string' ? email.trim().toLowerCase() : email;
@@ -89,7 +91,7 @@ export async function createStudentsBulk(rows) {
 
   const existingSet = new Set((existing || []).map((u) => (u.email || '').trim().toLowerCase()));
 
-  const toInsert = [];
+  const toHash = [];
   const skipped = [];
 
   for (const r of rows) {
@@ -108,28 +110,42 @@ export async function createStudentsBulk(rows) {
       continue;
     }
 
-    const initialPassword = generateInitialPassword(firstname, middlename, lastname);
-    const passwordHash = await bcrypt.hash(initialPassword, SALT_ROUNDS);
-
-    toInsert.push({
-      id: uuidv4(),
+    toHash.push({
+      firstname,
+      middlename,
+      lastname,
+      rawEmail,
+      className: r.className,
       name,
-      firstname: firstname || null,
-      middlename: middlename || null,
-      lastname: lastname || null,
-      email: rawEmail,
-      password_hash: passwordHash,
-      role: 'student',
-      class: r.className,
-      first_login: true,
-      // Attach non-persisted password so caller can email it
-      _initialPassword: initialPassword,
     });
   }
 
-  if (!toInsert.length) {
+  if (!toHash.length) {
     return { inserted: [], skipped, failed: [] };
   }
+
+  // Hash all passwords in parallel to avoid sequential bcrypt cost
+  const prepared = await Promise.all(
+    toHash.map(async (u) => {
+      const initialPassword = generateInitialPassword(u.firstname, u.middlename, u.lastname);
+      const passwordHash = await bcrypt.hash(initialPassword, BULK_SALT_ROUNDS);
+      const row = {
+        id: uuidv4(),
+        name: u.name,
+        firstname: u.firstname || null,
+        middlename: u.middlename || null,
+        lastname: u.lastname || null,
+        email: u.rawEmail,
+        password_hash: passwordHash,
+        role: 'student',
+        class: u.className,
+        first_login: true,
+      };
+      return { row, initialPassword };
+    }),
+  );
+
+  const toInsert = prepared.map((p) => p.row);
 
   const { data, error } = await supabase.from('users').insert(toInsert).select();
   if (error) {
@@ -144,7 +160,7 @@ export async function createStudentsBulk(rows) {
 
   // Merge back non-persisted initial passwords onto returned rows (matched by email)
   const initialByEmail = new Map(
-    toInsert.map((u) => [u.email, u._initialPassword]),
+    prepared.map((p) => [p.row.email, p.initialPassword]),
   );
   const insertedWithPassword =
     (data || []).map((u) => ({
