@@ -6,10 +6,7 @@ import { Spinner } from '../../components/Loading.jsx';
 import { useToast } from '../../state/ToastContext.jsx';
 import { BlockMath } from 'react-katex';
 
-const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(
-  /\/api\/?$/,
-  '',
-);
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '');
 function resolveMediaUrl(url) {
   if (!url) return '';
   if (/^https?:\/\//i.test(url)) return url;

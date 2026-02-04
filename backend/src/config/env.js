@@ -24,15 +24,35 @@ export const env = {
   smtpFrom: process.env.SMTP_FROM || 'no-reply@quizapp.com',
 };
 
+const isProduction = env.nodeEnv === 'production';
+
 if (!env.jwtSecret) {
-  throw new Error('JWT_SECRET is required');
+  const message = 'JWT_SECRET is required';
+  if (isProduction) {
+    throw new Error(message);
+  } else {
+    console.warn(`[env] ${message} – using insecure fallback for non-production environment.`);
+    env.jwtSecret = env.jwtSecret || 'insecure-development-secret-change-me';
+  }
 }
 
 if (!env.answerEncryptionKey || env.answerEncryptionKey.length < 32) {
-  throw new Error('ANSWER_ENCRYPTION_KEY must be at least 32 characters');
+  const message = 'ANSWER_ENCRYPTION_KEY must be at least 32 characters';
+  if (isProduction) {
+    throw new Error(message);
+  } else {
+    console.warn(`[env] ${message} – using insecure fallback for non-production environment.`);
+    env.answerEncryptionKey =
+      env.answerEncryptionKey || 'development-answer-encryption-key-must-be-32-chars!';
+  }
 }
 
 if (!env.supabaseUrl || !env.supabaseServiceKey) {
-  throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+  const message = 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required';
+  if (isProduction) {
+    throw new Error(message);
+  } else {
+    console.warn(`[env] ${message} – Supabase is not fully configured; some features may not work.`);
+  }
 }
 

@@ -20,6 +20,7 @@ import analyticsRoutes from './routes/analyticsRoutes.js';
 const app = express();
 
 app.use(
+  '/api',
   cors({
     origin: env.clientUrls.length > 1 ? env.clientUrls : env.clientUrl,
     credentials: false,
