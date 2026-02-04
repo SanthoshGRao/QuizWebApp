@@ -4,6 +4,7 @@ import { AppLayout } from '../../components/Layout.jsx';
 import { apiClient } from '../../api/client.js';
 import { Spinner } from '../../components/Loading.jsx';
 import { useToast } from '../../state/ToastContext.jsx';
+import { ConfirmModal } from '../../components/Modal.jsx';
 import { BlockMath } from 'react-katex';
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '');
@@ -27,6 +28,7 @@ export default function QuizTakePage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [triggerAutoSubmit, setTriggerAutoSubmit] = useState(false);
   const intervalRef = useRef(null);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -146,6 +148,11 @@ export default function QuizTakePage() {
 
   const handleSubmit = async (auto = false) => {
     if (submitting) return;
+    if (!auto) {
+      // manual submit goes through confirmation modal
+      setConfirmSubmit(true);
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = Object.entries(answers).map(([questionId, answer]) => ({
@@ -160,7 +167,7 @@ export default function QuizTakePage() {
       }
       navigate(`/result/${quizId}`, { state: { result: res.data.result } });
     } catch (err) {
-      addToast('Submit failed', 'error');
+      addToast(err.response?.data?.message || 'Submit failed', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -304,6 +311,16 @@ export default function QuizTakePage() {
           </div>
         </div>
       </div>
+      <ConfirmModal
+        open={confirmSubmit}
+        title="Submit quiz"
+        message="Are you sure you want to submit your answers now? You will not be able to change them afterwards."
+        confirmLabel="Submit"
+        cancelLabel="Cancel"
+        variant="primary"
+        onConfirm={() => handleSubmit(true)}
+        onCancel={() => setConfirmSubmit(false)}
+      />
     </AppLayout>
   );
 }

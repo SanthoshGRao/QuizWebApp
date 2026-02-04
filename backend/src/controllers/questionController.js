@@ -76,29 +76,51 @@ export async function createQuestion(req, res, next) {
       explanation,
     } = req.body;
 
-    if ((question_text ?? '').toString().trim().length === 0) {
+    const stem = (question_text ?? '').toString().trim();
+    if (!stem.length) {
       return res.status(400).json({ message: 'Question text is required.' });
     }
     if (type === 'comprehension' && (paragraph ?? '').toString().trim().length === 0) {
       return res.status(400).json({ message: 'Paragraph is required for comprehension questions.' });
     }
 
-    const validationError = validateOptions({ option1, option2, option3, option4 });
+    const opt1 = (option1 ?? '').toString().trim();
+    const opt2 = (option2 ?? '').toString().trim();
+    const opt3 = (option3 ?? '').toString().trim();
+    const opt4 = (option4 ?? '').toString().trim();
+
+    const validationError = validateOptions({ option1: opt1, option2: opt2, option3: opt3, option4: opt4 });
     if (validationError) {
       return res.status(400).json({ message: validationError });
+    }
+
+    // Prevent duplicates within the same quiz (same question text + options)
+    const { data: existing, error: dupErr } = await supabase
+      .from('questions')
+      .select('id')
+      .eq('quiz_id', quizId)
+      .eq('question_text', stem)
+      .eq('option1', opt1)
+      .eq('option2', opt2)
+      .eq('option3', opt3)
+      .eq('option4', opt4)
+      .maybeSingle();
+    if (dupErr) throw dupErr;
+    if (existing) {
+      return res.status(409).json({ message: 'This question already exists.' });
     }
 
     const uploadedUrl = req.file ? await uploadQuestionImage({ file: req.file, quizId }) : null;
     const record = {
       id: uuidv4(),
       quiz_id: quizId,
-      question_text,
+      question_text: stem,
       type,
       paragraph: paragraph || null,
-      option1,
-      option2,
-      option3,
-      option4,
+      option1: opt1,
+      option2: opt2,
+      option3: opt3,
+      option4: opt4,
       correct_option,
       image_url: uploadedUrl,
       media_url: uploadedUrl,

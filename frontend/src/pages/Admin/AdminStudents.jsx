@@ -4,7 +4,7 @@ import { AppLayout } from '../../components/Layout.jsx';
 import { useToast } from '../../state/ToastContext.jsx';
 import { Spinner } from '../../components/Loading.jsx';
 import { FileUpload } from '../../components/FileUpload.jsx';
-import { Modal } from '../../components/Modal.jsx';
+import { Modal, ConfirmModal } from '../../components/Modal.jsx';
 import { Select } from '../../components/Select.jsx';
 
 export default function AdminStudents() {
@@ -28,6 +28,7 @@ export default function AdminStudents() {
   const [performanceModal, setPerformanceModal] = useState({ open: false, data: null, loading: false });
   const [bulkFailedTab, setBulkFailedTab] = useState(false);
   const [classFilter, setClassFilter] = useState('');
+  const [confirmBulkUpload, setConfirmBulkUpload] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -85,6 +86,15 @@ export default function AdminStudents() {
   const handleBulk = async (e) => {
     e.preventDefault();
     if (!file) return;
+    const name = file.name?.toLowerCase() || '';
+    if (!name.endsWith('.csv')) {
+      addToast('Please upload a CSV file', 'error');
+      return;
+    }
+    if (!confirmBulkUpload) {
+      setConfirmBulkUpload(true);
+      return;
+    }
     setCreating(true);
     const fd = new FormData();
     fd.append('file', file);
@@ -129,6 +139,7 @@ export default function AdminStudents() {
       }
     } finally {
       setCreating(false);
+      setConfirmBulkUpload(false);
     }
   };
 
@@ -227,16 +238,39 @@ export default function AdminStudents() {
             <form onSubmit={handleBulk} className="card px-4 py-4 space-y-3 text-xs">
               <div className="font-medium text-slate-100">Bulk upload (CSV)</div>
               <p className="text-[11px] text-slate-400">
-                File should contain <code>firstname</code>, <code>middlename</code> (optional), <code>lastname</code>, <code>email</code>, <code>class</code>.
-                Initial password will be lowercase firstname+middlename+lastname (no spaces).
+                File should contain{' '}
+                <code>firstname</code>, <code>middlename</code> (optional), <code>lastname</code>,{' '}
+                <code>email</code>, <code>class</code>. Initial password will be lowercase
+                firstname+middlename+lastname (no spaces).
               </p>
-              <FileUpload
-                accept=".csv"
-                label="CSV file"
-                value={file}
-                onChange={setFile}
-                hint="Accepts .csv files"
-              />
+              <div className="flex flex-wrap gap-3 items-end">
+                <FileUpload
+                  accept=".csv"
+                  label="CSV file"
+                  value={file}
+                  onChange={setFile}
+                  hint="Accepts .csv files"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const header = 'firstname,middlename,lastname,email,class';
+                    const example = 'John,,Doe,john@example.com,Class A';
+                    const blob = new Blob([[header, example].join('\n')], {
+                      type: 'text/csv;charset=utf-8;',
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'students_sample.csv';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800"
+                >
+                  Download sample
+                </button>
+              </div>
               <button
                 type="submit"
                 disabled={creating || !file}
@@ -466,6 +500,16 @@ export default function AdminStudents() {
             </div>
           ) : null}
         </Modal>
+        <ConfirmModal
+          open={confirmBulkUpload}
+          title="Confirm bulk upload"
+          message="Are you sure you want to upload these students from CSV? Existing students will be skipped, and new accounts will be created."
+          confirmLabel="Yes, upload"
+          cancelLabel="Cancel"
+          variant="primary"
+          onConfirm={() => handleBulk(new Event('submit'))}
+          onCancel={() => setConfirmBulkUpload(false)}
+        />
       </div>
     </AppLayout>
   );

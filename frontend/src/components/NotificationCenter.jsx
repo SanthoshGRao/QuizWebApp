@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { apiClient } from '../api/client.js';
 
 export function NotificationCenter() {
@@ -86,8 +87,50 @@ export function NotificationCenter() {
     return <span className={classes}>{label}</span>;
   };
 
+  const dropdown = !open
+    ? null
+    : (
+      <>
+        <div className="fixed inset-0 z-[99998]" onClick={() => setOpen(false)} aria-hidden />
+        <div className="fixed right-3 md:right-6 top-14 md:top-16 w-80 max-h-[min(24rem,70vh)] rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-xl backdrop-blur z-[99999]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/80 bg-slate-800/50">
+            <span className="text-sm font-semibold text-slate-100">Notifications</span>
+            {unreadCount > 0 && (
+              <button onClick={markAllRead} className="text-xs text-indigo-400 hover:text-indigo-300 font-medium">
+                Mark all read
+              </button>
+            )}
+          </div>
+          <div className="max-h-80 overflow-auto">
+            {notifications.length === 0 ? (
+              <div className="p-6 text-center text-slate-500 text-sm">No notifications yet</div>
+            ) : (
+              notifications.map((n) => (
+                <div
+                  key={n.id}
+                  onClick={() => !n.read && markRead(n.id)}
+                  className={`px-4 py-3 border-b border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition ${
+                    !n.read ? 'bg-indigo-500/10 border-l-2 border-l-indigo-500' : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-medium text-slate-200">{n.title}</div>
+                    {renderTypePill(n.type)}
+                  </div>
+                  {n.message && <div className="text-xs text-slate-400 mt-0.5">{n.message}</div>}
+                  {n.created_at && (
+                    <div className="text-[11px] text-slate-500 mt-1">{formatTime(n.created_at)}</div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </>
+    );
+
   return (
-    <div className="relative shrink-0 z-[9999]">
+    <div className="relative shrink-0 z-[99999]">
       <button
         onClick={() => setOpen(!open)}
         className="relative p-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-slate-100 transition"
@@ -102,45 +145,7 @@ export function NotificationCenter() {
           </span>
         )}
       </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} aria-hidden />
-          <div className="fixed right-3 md:right-6 top-14 md:top-16 w-80 max-h-[min(24rem,70vh)] rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-xl backdrop-blur z-[9999]">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/80 bg-slate-800/50">
-              <span className="text-sm font-semibold text-slate-100">Notifications</span>
-              {unreadCount > 0 && (
-                <button onClick={markAllRead} className="text-xs text-indigo-400 hover:text-indigo-300 font-medium">
-                  Mark all read
-                </button>
-              )}
-            </div>
-            <div className="max-h-80 overflow-auto">
-              {notifications.length === 0 ? (
-                <div className="p-6 text-center text-slate-500 text-sm">No notifications yet</div>
-              ) : (
-                notifications.map((n) => (
-                  <div
-                    key={n.id}
-                    onClick={() => !n.read && markRead(n.id)}
-                    className={`px-4 py-3 border-b border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition ${
-                      !n.read ? 'bg-indigo-500/10 border-l-2 border-l-indigo-500' : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium text-slate-200">{n.title}</div>
-                      {renderTypePill(n.type)}
-                    </div>
-                    {n.message && <div className="text-xs text-slate-400 mt-0.5">{n.message}</div>}
-                    {n.created_at && (
-                      <div className="text-[11px] text-slate-500 mt-1">{formatTime(n.created_at)}</div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </>
-      )}
+      {createPortal(dropdown, document.body)}
     </div>
   );
 }

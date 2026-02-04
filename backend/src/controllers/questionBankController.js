@@ -24,16 +24,57 @@ export async function listBankQuestions(req, res, next) {
 /** POST /bank - Create question in bank */
 export async function createBankQuestion(req, res, next) {
   try {
-    const { question_text, type, paragraph, option1, option2, option3, option4, correct_option, explanation, subject, topic, difficulty, tags } = req.body;
+    const {
+      question_text,
+      type,
+      paragraph,
+      option1,
+      option2,
+      option3,
+      option4,
+      correct_option,
+      explanation,
+      subject,
+      topic,
+      difficulty,
+      tags,
+    } = req.body;
     if (!question_text || !option1 || !option2 || !option3 || !option4 || !correct_option) {
-      return res.status(400).json({ message: 'question_text, all options, and correct_option required' });
+      return res
+        .status(400)
+        .json({ message: 'question_text, all options, and correct_option required' });
     }
+
+    // Prevent exact duplicates in the bank (same stem + options)
+    const stem = String(question_text).trim();
+    const opt1 = String(option1).trim();
+    const opt2 = String(option2).trim();
+    const opt3 = String(option3).trim();
+    const opt4 = String(option4).trim();
+
+    const { data: existing, error: dupErr } = await supabase
+      .from('question_bank')
+      .select('id')
+      .eq('question_text', stem)
+      .eq('option1', opt1)
+      .eq('option2', opt2)
+      .eq('option3', opt3)
+      .eq('option4', opt4)
+      .maybeSingle();
+    if (dupErr) throw dupErr;
+    if (existing) {
+      return res.status(409).json({ message: 'This question already exists.' });
+    }
+
     const record = {
       id: uuidv4(),
-      question_text: String(question_text).trim(),
+      question_text: stem,
       type: type || 'text',
       paragraph: paragraph || null,
-      option1, option2, option3, option4,
+      option1: opt1,
+      option2: opt2,
+      option3: opt3,
+      option4: opt4,
       correct_option,
       explanation: explanation || null,
       subject: subject || null,

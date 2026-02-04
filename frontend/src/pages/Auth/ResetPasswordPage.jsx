@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../../api/client.js';
 import { useToast } from '../../state/ToastContext.jsx';
 import { Spinner } from '../../components/Loading.jsx';
+import { ConfirmModal } from '../../components/Modal.jsx';
 
 export default function ResetPasswordPage() {
   const [params] = useSearchParams();
@@ -10,18 +11,11 @@ export default function ResetPasswordPage() {
   const { addToast } = useToast();
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    try {
-      await apiClient.post('/auth/reset-password', { token, password });
-      addToast('Password reset successfully', 'success');
-    } catch (err) {
-      addToast(err.response?.data?.message || 'Reset failed', 'error');
-    } finally {
-      setLoading(false);
-    }
+    setConfirmReset(true);
   };
 
   if (!token) {
@@ -53,6 +47,27 @@ export default function ResetPasswordPage() {
           </button>
         </form>
       </div>
+      <ConfirmModal
+        open={confirmReset}
+        title="Reset password"
+        message="Are you sure you want to reset your password with this new value?"
+        confirmLabel="Yes, reset"
+        cancelLabel="Cancel"
+        variant="primary"
+        onConfirm={async () => {
+          setConfirmReset(false);
+          setLoading(true);
+          try {
+            await apiClient.post('/auth/reset-password', { token, password });
+            addToast('Password reset successfully', 'success');
+          } catch (err) {
+            addToast(err.response?.data?.message || 'Reset failed', 'error');
+          } finally {
+            setLoading(false);
+          }
+        }}
+        onCancel={() => setConfirmReset(false)}
+      />
     </div>
   );
 }

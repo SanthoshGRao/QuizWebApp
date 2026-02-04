@@ -36,7 +36,7 @@ export default function AdminQuestionManage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
-  const [importTab, setImportTab] = useState('bank');
+  const [activeTab, setActiveTab] = useState('manual'); // 'manual' | 'file' | 'bank'
   const [bankQuestions, setBankQuestions] = useState([]);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankSelectedIds, setBankSelectedIds] = useState([]);
@@ -60,7 +60,7 @@ export default function AdminQuestionManage() {
   }, [quizId, addToast]);
 
   useEffect(() => {
-    if (importTab !== 'bank') return;
+    if (activeTab !== 'bank') return;
     const loadBank = async () => {
       setBankLoading(true);
       try {
@@ -76,7 +76,7 @@ export default function AdminQuestionManage() {
     };
     loadBank();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [importTab, bankSearch]);
+  }, [activeTab, bankSearch]);
 
   const onEdit = (q) => {
     setEditing(q.id);
@@ -272,137 +272,313 @@ export default function AdminQuestionManage() {
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr),minmax(0,1fr)]">
             {!isPublished && (
-            <div className="card p-6 space-y-5 border-slate-700/80 bg-slate-800/30 shadow-lg shadow-black/20 rounded-2xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-100">
-                  {editing ? 'Edit question' : 'Add question'}
-                </h2>
-                {editing && (
-                  <button
-                    type="button"
-                    onClick={onCancelEdit}
-                    className="text-sm text-slate-400 hover:text-slate-200 transition px-2 py-1 rounded-lg hover:bg-slate-700/50"
-                  >
-                    Cancel edit
-                  </button>
-                )}
-              </div>
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {form.type === 'comprehension' && (
-                  <Field label="Paragraph">
-                    <textarea
-                      className="input min-h-[100px] text-[11px] rounded-xl"
-                      value={form.paragraph}
-                      onChange={(e) => handleChange('paragraph', e.target.value)}
-                      placeholder="Enter the comprehension passage/paragraph here."
-                      required
-                    />
-                  </Field>
-                )}
-                <Field label={form.type === 'comprehension' ? 'Question' : 'Question text'}>
-                  <textarea
-                    className="input min-h-[80px] rounded-xl"
-                    value={form.question_text}
-                    onChange={(e) => handleChange('question_text', e.target.value)}
-                    required
-                  />
-                </Field>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Type">
-                    <Select
-                      value={form.type}
-                      onChange={(val) => {
-                        const t = val || 'text';
-                        setForm((f) => ({ ...emptyForm(t), ...f, type: t }));
-                      }}
-                      options={QUESTION_TYPES}
-                      placeholder="Select type"
-                    />
-                  </Field>
-                  <Field label="Correct answer">
-                    <Select
-                      value={form.correct_option}
-                      onChange={(val) => handleChange('correct_option', val)}
-                      options={['option1', 'option2', 'option3', 'option4'].map((key) => {
-                        const text = (form[key] || '').trim() || `Option ${key.replace('option', '')}`;
-                        return { value: key, label: text.length > 60 ? text.slice(0, 57) + '...' : text };
-                      })}
-                      placeholder="Select correct option"
-                    />
-                  </Field>
+              <div className="card p-6 space-y-5 border-slate-700/80 bg-slate-800/30 shadow-lg shadow-black/20 rounded-2xl">
+                <div className="flex items-center justify-between border-b border-slate-700/70 pb-2 mb-3">
+                  <div className="flex gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('manual')}
+                      className={`px-3 py-1.5 rounded-xl border-b-2 ${
+                        activeTab === 'manual'
+                          ? 'border-indigo-400 text-slate-100'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Add Questions Manually
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('file')}
+                      className={`px-3 py-1.5 rounded-xl border-b-2 ${
+                        activeTab === 'file'
+                          ? 'border-indigo-400 text-slate-100'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Import from CSV / Excel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('bank')}
+                      className={`px-3 py-1.5 rounded-xl border-b-2 ${
+                        activeTab === 'bank'
+                          ? 'border-indigo-400 text-slate-100'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Add from Question Bank
+                    </button>
+                  </div>
+                  {editing && activeTab === 'manual' && (
+                    <button
+                      type="button"
+                      onClick={onCancelEdit}
+                      className="text-xs text-slate-400 hover:text-slate-200 transition px-2 py-1 rounded-lg hover:bg-slate-700/50"
+                    >
+                      Cancel edit
+                    </button>
+                  )}
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {['option1', 'option2', 'option3', 'option4'].map((key, idx) => (
-                    <Field key={key} label={`Option ${idx + 1}`}>
-                      <input
-                        className="input rounded-xl"
-                        value={form[key]}
-                        onChange={(e) => handleChange(key, e.target.value)}
+                {activeTab === 'manual' && (
+                  <form onSubmit={handleSubmit} className="space-y-5">
+                    {form.type === 'comprehension' && (
+                      <Field label="Paragraph">
+                        <textarea
+                          className="input min-h-[100px] text-[11px] rounded-xl"
+                          value={form.paragraph}
+                          onChange={(e) => handleChange('paragraph', e.target.value)}
+                          placeholder="Enter the comprehension passage/paragraph here."
+                          required
+                        />
+                      </Field>
+                    )}
+                    <Field label={form.type === 'comprehension' ? 'Question' : 'Question text'}>
+                      <textarea
+                        className="input min-h-[80px] rounded-xl"
+                        value={form.question_text}
+                        onChange={(e) => handleChange('question_text', e.target.value)}
                         required
                       />
                     </Field>
-                  ))}
-                </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Type">
+                        <Select
+                          value={form.type}
+                          onChange={(val) => {
+                            const t = val || 'text';
+                            setForm((f) => ({ ...emptyForm(t), ...f, type: t }));
+                          }}
+                          options={QUESTION_TYPES}
+                          placeholder="Select type"
+                        />
+                      </Field>
+                      <Field label="Correct answer">
+                        <Select
+                          value={form.correct_option}
+                          onChange={(val) => handleChange('correct_option', val)}
+                          options={['option1', 'option2', 'option3', 'option4'].map((key) => {
+                            const text = (form[key] || '').trim() || `Option ${key.replace('option', '')}`;
+                            return {
+                              value: key,
+                              label: text.length > 60 ? `${text.slice(0, 57)}...` : text,
+                            };
+                          })}
+                          placeholder="Select correct option"
+                        />
+                      </Field>
+                    </div>
 
-                {form.type === 'image' && (
-                  <Field label="Image">
-                    <FileUpload
-                      accept="image/*"
-                      label=""
-                      value={form.imageFile}
-                      onChange={(file) => {
-                        if (file && !file.type.startsWith('image/')) {
-                          addToast('Please select a valid image file', 'error');
-                          return;
-                        }
-                        setForm((f) => ({ ...f, imageFile: file || null }));
-                      }}
-                      hint="PNG, JPG, GIF, WebP"
-                    />
-                  </Field>
-                )}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {['option1', 'option2', 'option3', 'option4'].map((key, idx) => (
+                        <Field key={key} label={`Option ${idx + 1}`}>
+                          <input
+                            className="input rounded-xl"
+                            value={form[key]}
+                            onChange={(e) => handleChange(key, e.target.value)}
+                            required
+                          />
+                        </Field>
+                      ))}
+                    </div>
 
-                {form.type === 'math' && (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="LaTeX expression">
+                    {form.type === 'image' && (
+                      <Field label="Image">
+                        <FileUpload
+                          accept="image/*"
+                          label=""
+                          value={form.imageFile}
+                          onChange={(file) => {
+                            if (file && !file.type.startsWith('image/')) {
+                              addToast('Please select a valid image file', 'error');
+                              return;
+                            }
+                            setForm((f) => ({ ...f, imageFile: file || null }));
+                          }}
+                          hint="PNG, JPG, GIF, WebP"
+                        />
+                      </Field>
+                    )}
+
+                    {form.type === 'math' && (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <Field label="LaTeX expression">
+                          <textarea
+                            className="input min-h-[60px] font-mono text-[11px] rounded-xl"
+                            value={form.latex}
+                            onChange={(e) => handleChange('latex', e.target.value)}
+                            placeholder="e.g. E = mc^2"
+                          />
+                        </Field>
+                        <Field label="Preview">
+                          <div className="min-h-[60px] rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-2.5">
+                            {form.latex ? (
+                              <SafeTeX latex={form.latex} />
+                            ) : (
+                              <span className="text-[11px] text-slate-500">
+                                Live preview will appear here as you type.
+                              </span>
+                            )}
+                          </div>
+                        </Field>
+                      </div>
+                    )}
+
+                    <Field label="Explanation (optional)">
                       <textarea
-                        className="input min-h-[60px] font-mono text-[11px] rounded-xl"
-                        value={form.latex}
-                        onChange={(e) => handleChange('latex', e.target.value)}
-                        placeholder="e.g. E = mc^2"
+                        className="input min-h-[60px] text-[11px] rounded-xl"
+                        value={form.explanation}
+                        onChange={(e) => handleChange('explanation', e.target.value)}
+                        placeholder="Explain why this answer is correct."
                       />
                     </Field>
-                    <Field label="Preview">
-                      <div className="min-h-[60px] rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-2.5">
-                        {form.latex ? (
-                          <SafeTeX latex={form.latex} />
-                        ) : (
-                          <span className="text-[11px] text-slate-500">
-                            Live preview will appear here as you type.
-                          </span>
-                        )}
-                      </div>
-                    </Field>
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="submit"
+                        disabled={saving}
+                        className="btn-primary px-6 py-2.5 text-sm font-medium rounded-xl"
+                      >
+                        {saving ? <Spinner /> : editing ? 'Update question' : 'Create question'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {activeTab === 'file' && (
+                  <div className="space-y-4 text-xs">
+                    <p className="text-slate-400">
+                      Import multiple questions at once from a CSV or Excel file. Existing questions are kept;
+                      duplicates (same question text and options) are skipped.
+                    </p>
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const header = 'question_text,option1,option2,option3,option4,correct_option,explanation';
+                          const example = 'What is 2+2?,1,2,3,4,option4,Simple math question';
+                          const blob = new Blob([[header, example].join('\n')], {
+                            type: 'text/csv;charset=utf-8;',
+                          });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'quiz_questions_sample.csv';
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800"
+                      >
+                        Download sample
+                      </button>
+                      <span className="text-[11px] text-slate-500">
+                        Expected columns: question_text, option1–4, correct_option, explanation
+                      </span>
+                    </div>
+                    <form onSubmit={handleImport} className="flex flex-wrap gap-4 items-end">
+                      <FileUpload
+                        value={importFile}
+                        onChange={setImportFile}
+                        accept=".xlsx,.xls,.csv"
+                        hint="CSV or Excel (.csv, .xlsx, .xls)"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!importFile || importing}
+                        className="btn-primary px-5 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {importing ? <Spinner /> : 'Import'}
+                      </button>
+                    </form>
                   </div>
                 )}
 
-                <Field label="Explanation (optional)">
-                  <textarea
-                    className="input min-h-[60px] text-[11px] rounded-xl"
-                    value={form.explanation}
-                    onChange={(e) => handleChange('explanation', e.target.value)}
-                    placeholder="Explain why this answer is correct."
-                  />
-                </Field>
-
-                <div className="flex justify-end pt-2">
-                  <button type="submit" disabled={saving} className="btn-primary px-6 py-2.5 text-sm font-medium rounded-xl">
-                    {saving ? <Spinner /> : editing ? 'Update question' : 'Create question'}
-                  </button>
-                </div>
-              </form>
-            </div>
+                {activeTab === 'bank' && (
+                  <div className="space-y-3 text-xs">
+                    <p className="text-slate-400">
+                      Reuse questions from the central Question Bank. Select one or more questions and add them
+                      to this quiz.
+                    </p>
+                    <div className="flex flex-wrap gap-3 items-end">
+                      <div className="w-full md:w-64">
+                        <Field label="Search in bank">
+                          <input
+                            className="input"
+                            value={bankSearch}
+                            onChange={(e) => setBankSearch(e.target.value)}
+                            placeholder="Search bank questions..."
+                          />
+                        </Field>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddFromBank}
+                        disabled={!bankSelectedIds.length || bankLoading}
+                        className="btn-primary px-4 py-2 text-xs rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {bankLoading ? <Spinner /> : `Add selected (${bankSelectedIds.length})`}
+                      </button>
+                    </div>
+                    <div className="max-h-72 overflow-auto space-y-2 pr-1">
+                      {bankLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Spinner />
+                        </div>
+                      ) : bankQuestions.length ? (
+                        bankQuestions.map((q) => {
+                          const checked = bankSelectedIds.includes(q.id);
+                          return (
+                            <div
+                              key={q.id}
+                              className={`flex items-start gap-3 rounded-xl border px-3 py-2 text-xs cursor-pointer ${
+                                checked
+                                  ? 'border-indigo-500/60 bg-indigo-500/10'
+                                  : 'border-slate-700/80 bg-slate-900/40 hover:bg-slate-800/50 hover:border-slate-600/80'
+                              }`}
+                              onClick={() => toggleBankSelect(q.id)}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
+                                checked={checked}
+                                onChange={() => toggleBankSelect(q.id)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-slate-100 text-sm">
+                                  {q.question_text?.slice(0, 140)}
+                                  {(q.question_text?.length || 0) > 140 ? '…' : ''}
+                                </div>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {q.subject && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[11px]">
+                                      {q.subject}
+                                    </span>
+                                  )}
+                                  {q.topic && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[11px]">
+                                      {q.topic}
+                                    </span>
+                                  )}
+                                  {q.difficulty && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] capitalize bg-slate-800 text-slate-400">
+                                      {q.difficulty}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="py-10 text-center text-slate-500 text-sm border border-dashed border-slate-700 rounded-xl">
+                          No questions in bank yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="card p-6 space-y-4 border-slate-700/80 bg-slate-800/30 shadow-lg shadow-black/20 rounded-2xl">

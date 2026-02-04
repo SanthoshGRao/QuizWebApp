@@ -50,19 +50,62 @@ export async function importQuestions(req, res, next) {
       }
       try {
         if (target === 'bank') {
-          const { data: inserted, error } = await supabase.from('question_bank').insert([{
-            id: uuidv4(),
-            ...q,
-            created_by: req.user.id,
-          }]).select().single();
+          // Skip exact duplicates in the bank
+          const { data: existing, error: dupErr } = await supabase
+            .from('question_bank')
+            .select('id')
+            .eq('question_text', q.question_text)
+            .eq('option1', q.option1)
+            .eq('option2', q.option2)
+            .eq('option3', q.option3)
+            .eq('option4', q.option4)
+            .maybeSingle();
+          if (dupErr) throw dupErr;
+          if (existing) {
+            failed.push({ row: i + 2, reason: 'Duplicate question (already exists in bank)' });
+            continue;
+          }
+          const { data: inserted, error } = await supabase
+            .from('question_bank')
+            .insert([
+              {
+                id: uuidv4(),
+                ...q,
+                created_by: req.user.id,
+              },
+            ])
+            .select()
+            .single();
           if (error) throw error;
           added.push(inserted);
         } else {
-          const { data: inserted, error } = await supabase.from('questions').insert([{
-            id: uuidv4(),
-            quiz_id: target,
-            ...q,
-          }]).select().single();
+          // Skip exact duplicates within the target quiz
+          const { data: existing, error: dupErr } = await supabase
+            .from('questions')
+            .select('id')
+            .eq('quiz_id', target)
+            .eq('question_text', q.question_text)
+            .eq('option1', q.option1)
+            .eq('option2', q.option2)
+            .eq('option3', q.option3)
+            .eq('option4', q.option4)
+            .maybeSingle();
+          if (dupErr) throw dupErr;
+          if (existing) {
+            failed.push({ row: i + 2, reason: 'Duplicate question (already exists in quiz)' });
+            continue;
+          }
+          const { data: inserted, error } = await supabase
+            .from('questions')
+            .insert([
+              {
+                id: uuidv4(),
+                quiz_id: target,
+                ...q,
+              },
+            ])
+            .select()
+            .single();
           if (error) throw error;
           added.push(inserted);
         }
