@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-950 text-slate-50;
+}
+
+.card {
+  @apply bg-slate-900/70 border border-slate-800 rounded-2xl shadow-lg shadow-slate-900/60 backdrop-blur;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 font-medium transition-all duration-150 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed;
+}
+
+.input {
+  @apply w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+}
+
+/* Beautified datetime-local inputs */
+.datetime-picker-wrapper {
+  @apply w-full;
+}
+.datetime-input {
+  @apply w-full rounded-xl border border-slate-700 bg-slate-900/80 py-3 pr-4 text-sm text-slate-100;
+  @apply focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500 focus:ring-offset-0 focus:ring-offset-transparent;
+  @apply hover:border-slate-600 transition-all duration-200;
+  @apply min-h-[44px];
+  color-scheme: dark;
+}
+.datetime-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.8;
+  filter: invert(1);
+  padding: 4px;
+  margin-left: 2px;
+}
+.datetime-input::-webkit-datetime-edit {
+  color: rgb(241 245 249);
+}
+.datetime-input::-webkit-datetime-edit-fields-wrapper {
+  color: rgb(241 245 249);
+}
+.datetime-input::-webkit-datetime-edit-text {
+  color: rgb(100 116 139);
+  padding: 0 3px;
+}
+.datetime-input::-webkit-datetime-edit-month-field,
+.datetime-input::-webkit-datetime-edit-day-field,
+.datetime-input::-webkit-datetime-edit-year-field,
+.datetime-input::-webkit-datetime-edit-hour-field,
+.datetime-input::-webkit-datetime-edit-minute-field {
+  color: rgb(241 245 249);
+  padding: 2px 3px;
+}
+.datetime-input::-webkit-datetime-edit-ampm-field {
+  color: rgb(241 245 249);
+  padding: 2px 3px;
+}
+
