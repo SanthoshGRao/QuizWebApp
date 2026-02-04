@@ -18,7 +18,7 @@ import importExportRoutes from './routes/importExportRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 
 const app = express();
-
+app.set("trust proxy", 1);
 app.use(
   '/api',
   cors({
