@@ -23,24 +23,12 @@ function shuffleArray(arr, random = Math.random) {
   return a;
 }
 
-/** Shuffle questions and option order per student; remap correct_option to new keys. Uses seed for reproducibility. */
+/** Shuffle questions per student (order only, options stay fixed). Uses seed for reproducibility. */
 export function shuffleQuestionsAndOptions(questions, userId, quizId) {
   const seed = hashString(`${userId}-${quizId}`);
   const random = seededRandom(seed);
-  const shuffled = shuffleArray(questions, random);
-  return shuffled.map((q) => {
-    const optionKeys = ['option1', 'option2', 'option3', 'option4'];
-    const options = optionKeys.map((k) => ({ key: k, value: q[k] || '' }));
-    const shuffledOpts = shuffleArray(options, random);
-    const newQ = { ...q };
-    optionKeys.forEach((k, i) => {
-      newQ[k] = shuffledOpts[i].value;
-    });
-    const oldCorrect = q.correct_option;
-    const newIdx = shuffledOpts.findIndex((o) => o.key === oldCorrect);
-    newQ.correct_option = optionKeys[newIdx] || 'option1';
-    return newQ;
-  });
+  // Only shuffle the question list; options and correct_option remain as stored in DB.
+  return shuffleArray(questions || [], random);
 }
 
 function hashString(str) {
@@ -322,20 +310,40 @@ export async function addQuestionsFromBank(req, res, next) {
       return res.status(404).json({ message: 'No matching bank questions found' });
     }
 
-    const rows = bankQuestions.map((q) => ({
-      id: uuidv4(),
-      quiz_id: quizId,
-      question_text: q.question_text,
-      type: q.type || 'text',
-      paragraph: q.paragraph || null,
-      option1: q.option1,
-      option2: q.option2,
-      option3: q.option3,
-      option4: q.option4,
-      correct_option: q.correct_option,
-      explanation: q.explanation || null,
-      latex: q.latex || null,
-    }));
+    // Prevent duplicate questions within the same quiz (same text + all four options)
+    const { data: existingQuestions, error: existingErr } = await supabase
+      .from('questions')
+      .select('question_text, option1, option2, option3, option4')
+      .eq('quiz_id', quizId);
+    if (existingErr) throw existingErr;
+
+    const makeSignature = (q) =>
+      [
+        (q.question_text || '').trim(),
+        (q.option1 || '').trim(),
+        (q.option2 || '').trim(),
+        (q.option3 || '').trim(),
+        (q.option4 || '').trim(),
+      ].join('||');
+
+    const existingSignatures = new Set((existingQuestions || []).map(makeSignature));
+
+    const rows = bankQuestions
+      .filter((q) => !existingSignatures.has(makeSignature(q)))
+      .map((q) => ({
+        id: uuidv4(),
+        quiz_id: quizId,
+        question_text: q.question_text,
+        type: q.type || 'text',
+        paragraph: q.paragraph || null,
+        option1: q.option1,
+        option2: q.option2,
+        option3: q.option3,
+        option4: q.option4,
+        correct_option: q.correct_option,
+        explanation: q.explanation || null,
+        latex: q.latex || null,
+      }));
 
     const { data, error } = await supabase.from('questions').insert(rows).select();
     if (error) throw error;
@@ -429,18 +437,13 @@ export async function submitQuiz(req, res, next) {
     let { data: questions, error: qError } = await supabase
       .from('questions')
       .select('id, correct_option, option1, option2, option3, option4')
-      .eq('quiz_id', quizId);
+      .eq('quiz_id', quizId)
+      .order('id');
     if (qError) throw qError;
 
-    // CRITICAL FIX: Apply the SAME shuffle as when student loaded the quiz
-    // The frontend displays shuffled questions with remapped correct_option keys.
-    // Student answers use the shuffled option keys (option1/2/3/4 after shuffle).
-    // Without reshuffling here, we'd compare against original DB correct_option,
-    // causing incorrect scoring when options were shuffled.
-    // The shuffle is deterministic (same userId+quizId seed = same shuffle).
-    questions = shuffleQuestionsAndOptions(questions || [], userId, quizId);
-    
-    // Build map of questionId -> correct_option (after shuffle, matching what student saw)
+    // Build map of questionId -> correct_option.
+    // We no longer shuffle options; students see options exactly as stored,
+    // so we can compare their selected option key directly to the DB value.
     const correctMap = new Map(questions.map((q) => [q.id, q.correct_option]));
     
     let score = 0;
