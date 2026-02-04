@@ -431,12 +431,53 @@ export async function submitQuiz(req, res, next) {
       .select('id, correct_option, option1, option2, option3, option4')
       .eq('quiz_id', quizId);
     if (qError) throw qError;
+
+    // CRITICAL FIX: Apply the SAME shuffle as when student loaded the quiz
+    // The frontend displays shuffled questions with remapped correct_option keys.
+    // Student answers use the shuffled option keys (option1/2/3/4 after shuffle).
+    // Without reshuffling here, we'd compare against original DB correct_option,
+    // causing incorrect scoring when options were shuffled.
+    // The shuffle is deterministic (same userId+quizId seed = same shuffle).
+    questions = shuffleQuestionsAndOptions(questions || [], userId, quizId);
+    
+    // Build map of questionId -> correct_option (after shuffle, matching what student saw)
     const correctMap = new Map(questions.map((q) => [q.id, q.correct_option]));
+    
     let score = 0;
     const total = questions.length;
+    
+    // Debug logging to verify scoring correctness (temporary - remove after verification)
+    const debugLog = [];
+    
     const answerRows = answers.map((a) => {
       const correct = correctMap.get(a.questionId);
-      if (String(correct) === String(a.answer)) {
+      // Handle case where questionId doesn't exist (shouldn't happen, but be safe)
+      if (correct === undefined) {
+        debugLog.push({
+          questionId: a.questionId,
+          userAnswer: a.answer,
+          correctOption: 'NOT_FOUND',
+          isCorrect: false,
+        });
+        return {
+          id: uuidv4(),
+          user_id: userId,
+          quiz_id: quizId,
+          encrypted_answer: encryptAnswer(JSON.stringify(a)),
+        };
+      }
+      
+      const isCorrect = String(correct) === String(a.answer);
+      
+      // Debug logging
+      debugLog.push({
+        questionId: a.questionId,
+        userAnswer: a.answer,
+        correctOption: correct,
+        isCorrect,
+      });
+      
+      if (isCorrect) {
         score += 1;
       }
       return {
@@ -445,6 +486,15 @@ export async function submitQuiz(req, res, next) {
         quiz_id: quizId,
         encrypted_answer: encryptAnswer(JSON.stringify(a)),
       };
+    });
+
+    // Temporary debug log - remove after verifying scoring is correct
+    console.log('[submitQuiz] Scoring debug:', {
+      userId,
+      quizId,
+      total,
+      score,
+      breakdown: debugLog,
     });
 
     if (answerRows.length > 0) {
