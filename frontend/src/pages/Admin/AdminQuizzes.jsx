@@ -295,7 +295,16 @@ export default function AdminQuizzes() {
                         Edit
                       </button>
                     )}
-                    {quizListTab === 'finished' && !q.published && scheduleEnded && (
+                    {quizListTab === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(q)}
+                        className="px-2 py-1 rounded-lg border border-red-500/70 text-red-300 hover:bg-red-500/10"
+                      >
+                        Delete
+                      </button>
+                    )}
+                    {quizListTab === 'finished' && (
                       <button
                         type="button"
                         onClick={() => setConfirmDelete(q)}
@@ -333,7 +342,7 @@ export default function AdminQuizzes() {
         <ConfirmModal
           open={!!confirmDelete}
           title="Delete quiz"
-          message={confirmDelete ? 'Are you sure you want to delete this quiz?\nActive quizzes cannot be deleted.' : ''}
+          message={confirmDelete ? `Are you sure you want to delete "${confirmDelete.title}"?\n${new Date(confirmDelete.end_time) > new Date() ? 'This quiz is currently active. Deleting it will remove it immediately and students will no longer be able to access it.' : 'This action cannot be undone.'}` : ''}
           confirmLabel="Delete"
           cancelLabel="Cancel"
           variant="danger"

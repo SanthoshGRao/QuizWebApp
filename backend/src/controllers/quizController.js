@@ -207,14 +207,7 @@ export async function deleteQuiz(req, res, next) {
       return res.status(404).json({ message: 'Quiz not found' });
     }
 
-    const now = new Date();
-    const endTime = quiz.end_time ? new Date(quiz.end_time) : null;
-    if (quiz.published && endTime && endTime > now) {
-      return res
-        .status(400)
-        .json({ message: 'Active quizzes cannot be deleted. Unpublish or wait until ended.' });
-    }
-
+    // Allow deletion of active quizzes - admin can delete any quiz
     const { error: delError } = await supabase.from('quizzes').delete().eq('id', id);
     if (delError) throw delError;
 
