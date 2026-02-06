@@ -12,16 +12,35 @@ body {
   @apply bg-slate-950 text-slate-50;
 }
 
+html,
+body {
+  /* Prevent horizontal scrolling on small screens */
+  overflow-x: hidden;
+  /* Avoid unexpected font scaling on mobile */
+  -webkit-text-size-adjust: 100%;
+}
+
 .card {
   @apply bg-slate-900/70 border border-slate-800 rounded-2xl shadow-lg shadow-slate-900/60 backdrop-blur;
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 font-medium transition-all duration-150 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed;
+  /* Primary button – mobile friendly and consistent */
+  @apply inline-flex items-center justify-center rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 font-medium transition-all duration-150 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px] text-sm md:text-xs;
 }
 
 .input {
-  @apply w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+  /* Form input – one-column friendly and large enough to prevent zoom on focus */
+  @apply w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-base md:text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-h-[44px];
+}
+
+/* Safe area utilities for devices with notches */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Beautified datetime-local inputs */

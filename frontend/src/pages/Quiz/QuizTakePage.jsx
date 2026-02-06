@@ -29,6 +29,7 @@ export default function QuizTakePage() {
   const [triggerAutoSubmit, setTriggerAutoSubmit] = useState(false);
   const intervalRef = useRef(null);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const touchStartXRef = useRef(null);
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -133,6 +134,37 @@ export default function QuizTakePage() {
     return () => { cancelled = true; };
   }, [triggerAutoSubmit, quizId, addToast, navigate]);
 
+  const goToPreviousQuestion = () => {
+    setCurrentIdx((i) => Math.max(0, i - 1));
+  };
+
+  const goToNextQuestion = () => {
+    setCurrentIdx((i) => Math.min(questions.length - 1, i + 1));
+  };
+
+  // Basic swipe navigation support for touch devices
+  const handleTouchStart = (e) => {
+    if (!e.touches?.length) return;
+    touchStartXRef.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartXRef.current == null) return;
+    const endX = e.changedTouches?.[0]?.clientX;
+    if (endX == null) {
+      touchStartXRef.current = null;
+      return;
+    }
+    const deltaX = endX - touchStartXRef.current;
+    const threshold = 40; // small swipe threshold suitable for mobile
+    if (deltaX > threshold) {
+      goToPreviousQuestion();
+    } else if (deltaX < -threshold) {
+      goToNextQuestion();
+    }
+    touchStartXRef.current = null;
+  };
+
   const handleSelect = async (qid, optionKey) => {
     const next = { ...answers, [qid]: optionKey };
     setAnswers(next);
@@ -190,16 +222,20 @@ export default function QuizTakePage() {
 
   return (
     <AppLayout>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      <div
+        className="space-y-4 relative pb-16 md:pb-0"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg font-semibold">{quiz.title}</h1>
             <p className="text-xs text-slate-400">
               Question {currentIdx + 1} of {questions.length}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-xs text-slate-400">
+          <div className="flex items-center gap-3 justify-between md:justify-end">
+            <div className="hidden md:block text-xs text-slate-400">
               Time left{' '}
               <span className="font-mono text-sm text-indigo-300">
                 {minutes}:{seconds}
@@ -269,10 +305,11 @@ export default function QuizTakePage() {
                 </button>
               ))}
             </div>
-            <div className="flex items-center justify-between pt-4 border-t border-slate-800 mt-4">
+            {/* Desktop / tablet navigation buttons under the question */}
+            <div className="hidden md:flex items-center justify-between pt-4 border-t border-slate-800 mt-4">
               <button
                 type="button"
-                onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
+                onClick={goToPreviousQuestion}
                 disabled={currentIdx === 0}
                 className="px-4 py-2 rounded-xl border border-slate-600 text-slate-200 text-sm hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
@@ -280,7 +317,7 @@ export default function QuizTakePage() {
               </button>
               <button
                 type="button"
-                onClick={() => setCurrentIdx((i) => Math.min(questions.length - 1, i + 1))}
+                onClick={goToNextQuestion}
                 disabled={currentIdx === questions.length - 1}
                 className="px-4 py-2 rounded-xl border border-slate-600 text-slate-200 text-sm hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
@@ -308,6 +345,33 @@ export default function QuizTakePage() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+        {/* Mobile-friendly bottom navigation bar & floating timer */}
+        <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 md:hidden border-t border-slate-800 bg-slate-950/95 backdrop-blur flex items-center">
+          <div className="max-w-6xl mx-auto flex-1 px-4 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={goToPreviousQuestion}
+              disabled={currentIdx === 0}
+              className="flex-1 mr-1 px-3 py-2 rounded-xl border border-slate-600 text-slate-100 text-xs font-medium hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              Previous
+            </button>
+            <div className="flex flex-col items-center justify-center px-2">
+              <span className="text-[11px] text-slate-400">Time left</span>
+              <span className="font-mono text-sm text-indigo-300">
+                {minutes}:{seconds}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={goToNextQuestion}
+              disabled={currentIdx === questions.length - 1}
+              className="flex-1 ml-1 px-3 py-2 rounded-xl border border-slate-600 text-slate-100 text-xs font-medium hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
